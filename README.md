@@ -98,7 +98,7 @@ This project is being developed as the foundation for a larger enterprise AI pla
 
 | Component        | Technology             | Purpose               |
 | ---------------- | ---------------------- | --------------------- |
-| Frontend         | Lovable                | User Interface        |
+| Frontend         | streamlit currently    | User Interface        |
 | Backend          | FastAPI                | REST APIs             |
 | Language         | Python                 | Core Development      |
 | Data Processing  | Pandas, NumPy          | Analytics             |
@@ -169,12 +169,12 @@ ai-retail-copilot/
 
 * [x] Repository Created
 * [x] README Created
-* [ ] Design Document
-* [ ] Architecture Diagram
-* [ ] Backend Setup
-* [ ] Frontend Setup
-* [ ] Sample Dataset Added
-* [ ] Data Ingestion Pipeline
+* [x] Design Document
+* [x] Architecture Diagram
+* [x] Backend Setup
+* [x] Frontend Setup
+* [x] Sample Dataset Added
+* [x] Data Ingestion Pipeline
 
 ---
 
@@ -248,14 +248,14 @@ ai-retail-copilot/
 ## 🚧 Current Challenges
 
 * Finalizing architecture after mentor feedback
-* Preparing implementation roadmap
+
 
 ## 🎯 Goals for Next Week
 
 1. Initialize FastAPI backend
 2. Build Lovable frontend
 3. Implement CSV upload
-4. Build analytics pipeline
+4. Build a working analytics pipeline
 
 ## 💬 Mentor Feedback Requested
 
