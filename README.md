@@ -142,8 +142,8 @@ ai-retail-copilot/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/tanishkaarora/internship-project.git
-cd internship-project
+git clone https://github.com/tanishkaarora/retailbrain.git
+cd retailbrain
 ```
 
 ### 2. Configure Virtual Environment
