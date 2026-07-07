@@ -24,8 +24,8 @@ class AnalyticsEngine:
         """
         grouped = df.groupby(group_col)[value_col].sum().reset_index()
         grouped = grouped.sort_values(value_col, ascending=ascending).head(n)
-        rows = [f"{i+1}. {row[group_col]}: {row[value_col]:,.2f}"
-                for i, row in grouped.iterrows()]
+        rows = [f"{rank}. {row[group_col]}: {row[value_col]:,.2f}"
+                for rank, (_, row) in enumerate(grouped.iterrows(), 1)]
         direction = "Bottom" if ascending else "Top"
         return f"{direction} {n} {group_col} by {value_col}:\n" + "\n".join(rows)
 

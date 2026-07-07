@@ -39,8 +39,13 @@ def generate_charts(df: pd.DataFrame, profile: dict) -> List[Tuple[str, object]]
 
     # Scatter: if 2+ numerics
     if len(nums) >= 2:
-        fig = px.scatter(df, x=nums[0], y=nums[1],
-                         color=cats[0] if cats else None,
+        scatter_df = df.copy()
+        if cats and scatter_df[cats[0]].nunique() > 15:
+            color_col = None
+        else:
+            color_col = cats[0] if cats else None
+        fig = px.scatter(scatter_df, x=nums[0], y=nums[1],
+                         color=color_col,
                          title=f"{nums[0]} vs {nums[1]}")
         charts.append((f"{nums[0]} vs {nums[1]}", fig))
 

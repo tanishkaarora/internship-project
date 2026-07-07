@@ -227,8 +227,8 @@ with tab_chat:
                     )
                     elapsed = time.time() - start
 
-                st.write(result["answer"])
-                st.caption(f"Route: {result['route'].upper()} | Processing time: {elapsed:.1f}s")
+                st.write(result.get("answer", "Sorry, I could not generate an answer. Please try again."))
+                st.caption(f"Route: {result.get('route', 'unknown').upper()} | Processing time: {elapsed:.1f}s")
 
                 if result.get("sources"):
                     with st.expander("Sources"):
@@ -238,6 +238,6 @@ with tab_chat:
             # Save to history
             st.session_state.chat_history.append({
                 "role": "assistant",
-                "content": result["answer"],
+                "content": result.get("answer", ""),
                 "sources": result.get("sources", [])
             })

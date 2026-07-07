@@ -30,7 +30,7 @@ class SynthesiserNode:
         if state.chat_history:
             recent = state.chat_history[-4:]  # last 2 exchanges
             history_text = "\n".join(
-                f"{m['role'].upper()}: {m['content'][:100]}" for m in recent
+                f"{m['role'].upper()}: {m['content'][:200]}" for m in recent
             )
 
         prompt = SYNTHESISER_PROMPT.format(
