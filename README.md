@@ -215,16 +215,6 @@ python run_tests.py
 
 ---
 
-## 🛣️ Long-Term Roadmap (3rd Year)
-
-This project will continue to evolve into a production-grade enterprise platform throughout my third year:
-
-* **SaaS Split Architecture:** Separate frontend (React/TypeScript) and backend (FastAPI, Redis) execution spaces.
-* **Persistent Knowledge DB:** Transition from local FAISS to a cloud-based pgvector/PostgreSQL setup.
-* **Machine Learning Analytics:** Train and integrate ML models (XGBoost/Prophet) for future inventory and sales forecasting.
-* **Collaborative AI Agent Framework:** Build specialized sub-agents coordinating autonomously to write briefs or replenish stocks.
-* **Enterprise Security:** Support multi-tenant OAuth2 user login and dataset permission rules.
-
 ---
 
 ## 👤 Author & Course Track
