@@ -22,6 +22,15 @@ Most tools handle one or the other. This copilot handles both simultaneously, ro
 
 ---
 
+## 📄 Project Documentation
+
+Explore the detailed architecture designs and decisions:
+- 📘 **[Design Document](docs/design_doc.md)** — High-level requirements, data schemas, and target personas.
+- 🏗️ **[Architecture Document](docs/architecture.md)** — Core modules responsibilities and system sequence flow charts.
+- 📝 **[ADR-001 (LangGraph Adoption)](docs/adr/ADR-001.md)** — Architectural Decision Record on migrating to LangGraph StateGraph.
+
+---
+
 ## ✨ What It Can Do
 
 **Ask analytics questions about your CSV:**
