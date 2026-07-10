@@ -20,8 +20,6 @@ Most tools handle one or the other. This copilot handles both simultaneously, ro
 
 > Loom walkthrough coming in Week 4
 
-**Try it yourself:** Upload `data/sample_retail.csv` and ask *"which product has the highest revenue?"*
-
 ---
 
 ## ✨ What It Can Do
@@ -213,10 +211,10 @@ All tests passed successfully!
 | CSV/Excel ingestion + cleaning | ✅ Done |
 | KPI computation (revenue, trend, anomalies) | ✅ Done |
 | Auto Plotly charts (bar, line, histogram, scatter) | ✅ Done |
-| PDF parsing and FAISS indexing | ✅ Done |
-| LangGraph intent routing | ✅ Done |
+| PDF parsing and FAISS indexing |⏳ Week 3 |
+| LangGraph intent routing | ⏳ Week 3 |
 | Streamlit UI (3 tabs: Overview, Charts, Ask) | ✅ Done |
-| Unit tests | ✅ Done |
+| Unit tests |⏳ Week 3 |
 | Deployment | ⏳ Week 4 |
 | ADRs (3 required) | ⏳ Week 3 |
 
