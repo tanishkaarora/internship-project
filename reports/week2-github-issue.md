@@ -1,109 +1,100 @@
-# Week 2 Submission – End-to-End MVP
+## Week 2 Submission — End-to-End MVP
 
-## ✅ Deliverables
+### ✅ What I submitted this week
 
-- [x] **End-to-end demo.** Screenshot or 3-min screen recording of the full product working on a small slice (refer to the [demo/README.md](file:///c:/Users/HP/OneDrive/Desktop/ai%20copilot/demo/README.md) walkthrough).
-- [x] **Updated README** (the "What I learned" section has grown).
-- [x] **First ADR (Architecture Decision Record).**
-- [x] **At least 10 GitHub commits** total on main.
-- [x] **A "What surprised me" note** (2-3 sentences). Real learning, not fluff.
-- [x] **Status one-pager** (same format as Week 1).
-
----
-
-## Updated README
-
-The repository's [README.md](file:///c:/Users/HP/OneDrive/Desktop/ai%20copilot/README.md) has been updated with:
-* An **Architecture Overview** containing a Mermaid schema of our LangGraph StateGraph pipeline.
-* A step-by-step **Usage Guide** explaining file upload, dashboards, and chat questions.
-* Explicit **Testing Guidelines** for running local unit tests and graph tests.
-* A **"What I Learned"** section detailing 8 genuine engineering takeaways on dynamic routing, pandas currency normalization, state decoupling, and FAISS vector indices.
+- End-to-end demo (screenshot + screen recording in demo/README.md)
+- Updated README with architecture, usage guide, and what I learned
+- First ADR (Architecture Decision Record) — docs/adr/ADR-001.md
+- 15 commits on main branch
+- "What surprised me" note
+- Status one-pager
 
 ---
 
-## ADR-001
+### 📸 Demo Evidence
 
-Reference:
+Upload `data/sample_retail.csv` → click Process Files → go to Ask tab → ask:
+- "Which product has the highest revenue?" → routes to analytics
+- "What does the report say about Q3?" → routes to RAG
+- "Why did electronics drop and what does the strategy doc say?" → routes to both
 
-[docs/adr/ADR-001.md](file:///c:/Users/HP/OneDrive/Desktop/ai%20copilot/docs/adr/ADR-001.md)
-
-### ADR-001: Adopting LangGraph StateGraph for Context-Aware Routing and Orchestration
-
-#### Context
-The AI Retail Decision Copilot was initially designed as a sequential execution chain where all user requests passed through the same linear pipeline. Requests for quantitative calculations (e.g., top products, monthly sales trends) and qualitative document searches (e.g., return policies, store SOPs) went through identical processing blocks.
-
-This linear pipeline approach suffered from inefficient latency, context pollution (merging unrelated document snippets with quantitative table analysis), and API cost inefficiency (high-token document context ran through the LLM for every single interaction).
-
-#### Decision
-We chose to migrate from a sequential pipeline to a state-machine based directed graph architecture using **LangGraph StateGraph**.
-
-The implemented design organizes the application flow into discrete execution nodes:
-1. **`intent_router`:** Classifies user query intent into `analytics`, `rag`, or `both`.
-2. **`analytics_node`:** Invokes pandas-based analytical logic on dataframes.
-3. **`rag_node`:** Ingests document questions, retrieves relevant chunks from FAISS.
-4. **`synthesiser`:** Evaluates outputs, reconciles calculations with qualitative text, and outputs the final cited response.
-
-State is defined globally using a Pydantic-based `CopilotState` schema.
-
-#### Consequences
-* **Positive:**
-  * Quantitative queries skip vector searches completely (faster, lower cost).
-  * Decoupled nodes make the codebase highly modular.
-  * Context isolation prevents LLM prompt dilution.
-* **Negative:**
-  * Increased system complexity and learning curve.
-  * Minor routing latency overhead (approx. 100–300ms) for the initial LLM intent routing call.
-* **Trade-offs:** We accepted the initial classification call latency in exchange for cleaner context, higher reasoning accuracy, and reduced downstream token usage.
-
-#### Alternatives Considered
-* **Single LLM Prompt with Tool Calling:** Rejected because tool-calling agents are less deterministic and harder to test.
-* **Rule/Regex-Based Router:** Rejected because conversational queries are highly expressive, and semantic routing is far more robust.
+Screenshots and screen recording in `demo/README.md`.
 
 ---
 
-## Commits
+### 📝 ADR-001 — Why I chose LangGraph over a simple chain
 
-The current commit count in the repository is **13 commits** on the main branch.
+**Full doc:** `docs/adr/ADR-001.md`
+
+**The problem I was solving:**
+
+My first version sent every question through the same pipeline — whether someone asked "what are my top products?" (needs pandas) or "what does the report say?" (needs document search). This caused three problems:
+
+1. Slow — document search ran even for simple number questions
+2. Messy answers — the LLM got both chart data AND document text mixed together in one prompt
+3. Expensive — wasted tokens on context that wasn't relevant
+
+**What I decided:**
+
+I rebuilt the pipeline as a LangGraph state machine with 4 separate nodes:
+
+- `intent_router` — reads the question, decides: analytics / rag / both
+- `analytics_node` — runs pandas calculations on the uploaded CSV
+- `rag_node` — searches the FAISS index if a PDF was uploaded
+- `synthesiser` — takes whatever ran and writes the final answer with citations
+
+Now a question about sales numbers never touches the document index at all.
+
+**What I gave up:**
+
+One extra LLM call per question (the router). It adds ~100-300ms. Worth it for cleaner answers and lower overall token cost.
+
+**What I rejected:**
+
+- Simple if/else keyword routing — breaks on anything conversational
+- Tool-calling agent — less predictable, harder to test and debug
 
 ---
 
-## What Surprised Me
+### 💬 What Surprised Me
 
-During implementation, I was surprised by how much prompt pollution degraded synthesis quality when quantitative table findings were mixed with unstructured document text. Transitioning to a semantic StateGraph router using LangGraph not only resolved this by separating analytical and retrieval contexts but also drastically optimized API costs by avoiding redundant vector queries.
+I expected the quality difference between the old and new version to be small. It wasn't. When I mixed the pandas analytics output and the PDF document text into one big prompt, the LLM got confused and gave generic answers that didn't really use either source well. Once I separated them and only merged at the synthesiser stage, the answers got dramatically more specific and accurate. The routing step wasn't just an optimisation — it was what made the answers actually useful.
 
 ---
 
-## Status Report
+### 📊 What I Built This Week
 
-Reference:
+| Thing | Done? |
+|-------|-------|
+| LangGraph routing (analytics / rag / both) | ✅ |
+| CSV cleaning and profiling (pandas) | ✅ |
+| KPIs, trend analysis, anomaly detection | ✅ |
+| Auto Plotly charts (bar, line, histogram, scatter) | ✅ |
+| PDF parsing + FAISS vector indexing | ✅ |
+| Streamlit UI — Overview, Charts, Ask tabs | ✅ |
+| Unit tests + graph flow tests passing | ✅ |
 
-[reports/status-week2.md](file:///c:/Users/HP/OneDrive/Desktop/ai%20copilot/reports/status-week2.md)
+---
 
-### Week 2 Status
+### 🧱 Challenges I Hit and How I Fixed Them
 
-#### Objectives
-* Implement dynamic query routing.
-* Build automated business analytics helpers.
-* Develop local PDF document parsing, text chunking, and local FAISS vector indexing.
-* Unify frontend dashboard features and conversational chat widget.
+**DataFrames in LangGraph state** — I tried putting the pandas DataFrame directly inside `CopilotState`. It caused serialization problems. Fixed it by keeping the DataFrame in `st.session_state` and only passing a lightweight text summary through the LangGraph state.
 
-#### Work Completed
-* **LangGraph Orchestration:** Replaced linear pipeline with `StateGraph` workflow.
-* **Robust Ingestion Pipeline:** Implemented clean pandas ingestion.
-* **Analytical Analytics Engine:** Designed calculations for top-N ranking, monthly trends, and outlier detection.
-* **Plotly Chart Builder:** Created automated visualization code.
-* **Local RAG Integration:** Implemented PDF text extraction, chunking, and local FAISS.
-* **Streamlit UI Layout:** Sidebar drawers, KPI metrics, charts, and chat are live.
+**Currency parsing** — CSVs with `$1,200` or `£800` were being read as strings. Wrote a regex in `data_ingester.py` to strip currency symbols before converting to numbers.
 
-#### Challenges & Solutions
-* **State vs. Streamlit Coupling:** Kept DataFrame in Streamlit session state and passed only lightweight metadata in `CopilotState`.
-* **Currency Parsing:** Wrote cleaning regexes in `data_ingester.py` to scrub currency symbols before numeric conversion.
-* **Streamlit Script Context in Tests:** Mocked Streamlit session variables inside graph tests to run assertions headlessly.
+**Testing without Streamlit running** — Graph tests need `st.session_state` but there's no browser in a test. Fixed by mocking the session state dict directly in `test_graph_flow.py`.
 
-#### Current Progress
-The end-to-end MVP is fully functional. Ingestion, charts, KPIs, RAG, and StateGraph routing work together. All unit and graph tests pass.
+---
 
-#### Next Week Goals
-* Split the monolithic layout into a dedicated backend API (FastAPI) and modern frontend space (React/TypeScript).
-* Upgrade FAISS to pgvector on PostgreSQL.
-* Add predictive ML models (Prophet/XGBoost).
+### 🎯 Goals for Week 3
+
+1. Polish the UI — better layout, loading states, error messages
+2. Write ADR-002 (FAISS vs ChromaDB) and ADR-003 (Streamlit vs FastAPI+React)
+3. Add the Smart Column Detective mini-extension
+4. Start deployment prep
+
+---
+
+### 🙋 One thing I want mentor help on
+
+How should I handle the case where neither a CSV nor a PDF has been uploaded and the user asks a question? Right now it returns a generic "no data uploaded" message — but should the copilot still try to answer from general knowledge, or always refuse?
