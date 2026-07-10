@@ -241,17 +241,6 @@ All tests passed successfully!
 
 ---
 
-## 🔮 V2 Plans (3rd Year)
-
-- FastAPI backend + React frontend
-- DuckDB SQL layer for querying across multiple files
-- Demand forecasting with Prophet
-- Recommendation engine
-- Multi-user authentication
-- Persistent storage
-
----
-
 ## 👤 Author
 
 **Tanishka Arora** — 2nd Year B.Tech CSE (AI & Data Engineering)  
