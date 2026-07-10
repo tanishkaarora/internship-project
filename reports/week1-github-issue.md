@@ -16,7 +16,7 @@
 ### 📂 Repository & Project Metadata
 
 * **Repository Link:** https://github.com/tanishkaarora/retailbrain
-* **Project Name:** AI Retail Decision Copilot
+* **Project Name:** AI Retailbrain
 * **One-Line Description:** An AI-powered business analytics assistant that helps retail businesses make smarter decisions by combining structured data analysis with unstructured document retrieval.
 * **Author:** Tanishka Arora — 2nd Year B.Tech CSE (AI & Data Engineering)
 * **Internship Segment:** Segment 3: Foundations of Applied ML
@@ -62,11 +62,7 @@ All tests passed successfully!
 
 ---
 
-### 📊 Commits
 
-* **Total commits on main:** Verified (the repository currently has 17 commits total, satisfying the minimum requirement of 5 commits for Week 1).
-
----
 
 ### 💡 What I Learned (Bullet Points)
 
@@ -90,4 +86,4 @@ All tests passed successfully!
   * Build the LangGraph StateGraph pipeline with intent classification routing.
   * Complete integrated mock-based graph flow routing tests.
 * **One thing I'd like help from my mentor on:**
-  * How should I handle the case where neither a CSV nor a PDF has been uploaded and the user asks a question? Right now it returns a generic "no data uploaded" message — but should the copilot still try to answer from general knowledge, or always refuse?
+  *confused about the frontend part,should i switch to react or stick with streamlit only.
