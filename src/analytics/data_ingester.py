@@ -25,7 +25,37 @@ class DataIngester:
                     uploaded_file.seek(0)
             raise ValueError("Cannot decode CSV. Try saving as UTF-8.")
         elif name.endswith((".xlsx", ".xls")):
-            return pd.read_excel(uploaded_file, engine="openpyxl")
+            try:
+                uploaded_file.seek(0)
+                engine = "openpyxl" if name.endswith(".xlsx") else None
+                return pd.read_excel(uploaded_file, engine=engine)
+            except Exception as e:
+                # Fallback 1: Install xlrd if missing for legacy .xls files
+                if "xlrd" in str(e).lower() or "install xlrd" in str(e).lower():
+                    try:
+                        import subprocess
+                        import sys
+                        subprocess.check_call([sys.executable, "-m", "pip", "install", "xlrd"])
+                        uploaded_file.seek(0)
+                        return pd.read_excel(uploaded_file, engine="xlrd")
+                    except Exception:
+                        pass
+
+                # Fallback 2: Read as comma-separated text
+                try:
+                    uploaded_file.seek(0)
+                    return pd.read_csv(uploaded_file)
+                except Exception:
+                    pass
+
+                # Fallback 3: Read as tab-separated text
+                try:
+                    uploaded_file.seek(0)
+                    return pd.read_csv(uploaded_file, sep="\t")
+                except Exception:
+                    pass
+
+                raise ValueError(f"Failed to read Excel file. If it is a legacy XLS file, please save it as XLSX or CSV. Detail: {e}")
         else:
             raise ValueError(f"Unsupported file type: {name}")
 

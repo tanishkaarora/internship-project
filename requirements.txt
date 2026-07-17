@@ -11,4 +11,4 @@ faiss-cpu
 python-dotenv
 pytest
 langchain-google-genai
-
+xlrd
