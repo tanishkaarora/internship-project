@@ -132,7 +132,77 @@ class CopilotGraphBuilder:
                         else:
                             content = "both"
                     elif "map a user's question to the correct columns" in last_msg_lower:
-                        content = '{"numeric_col": "quantity", "categorical_col": "product", "date_col": "order_date"}'
+                        numeric_cols = []
+                        cat_cols = []
+                        date_cols = []
+                        question = ""
+                        try:
+                            if "available numeric columns:" in last_msg_lower:
+                                num_str = original_msg.split("Available Numeric Columns:")[1].split("\n")[0].strip()
+                                numeric_cols = eval(num_str)
+                            if "available categorical columns:" in last_msg_lower:
+                                cat_str = original_msg.split("Available Categorical Columns:")[1].split("\n")[0].strip()
+                                cat_cols = eval(cat_str)
+                            if "available date columns:" in last_msg_lower:
+                                date_str = original_msg.split("Available Date Columns:")[1].split("\n")[0].strip()
+                                date_cols = eval(date_str)
+                            if "question:" in last_msg_lower:
+                                question = original_msg.split("Question:")[1].split("\n")[0].strip().lower()
+                        except Exception:
+                            pass
+                        
+                        mapped_num = numeric_cols[0] if numeric_cols else ""
+                        mapped_cat = cat_cols[0] if cat_cols else ""
+                        mapped_date = date_cols[0] if date_cols else ""
+                        
+                        if question:
+                            # Map numeric
+                            if "sales" in question or "revenue" in question:
+                                for c in ["sales", "revenue", "amount"]:
+                                    match = [col for col in numeric_cols if c in col]
+                                    if match:
+                                        mapped_num = match[0]
+                                        break
+                            elif "profit" in question or "margin" in question:
+                                for c in ["profit", "margin"]:
+                                    match = [col for col in numeric_cols if c in col]
+                                    if match:
+                                        mapped_num = match[0]
+                                        break
+                            elif "quantity" in question or "units" in question or "sold" in question:
+                                for c in ["quantity", "unit", "qty"]:
+                                    match = [col for col in numeric_cols if c in col]
+                                    if match:
+                                        mapped_num = match[0]
+                                        break
+                                        
+                            # Map categorical
+                            if "product" in question or "item" in question:
+                                for c in ["product_name", "product", "item", "sku"]:
+                                    match = [col for col in cat_cols if c in col]
+                                    if match:
+                                        mapped_cat = match[0]
+                                        break
+                            elif "category" in question or "department" in question or "type" in question:
+                                for c in ["category", "sub_category", "type"]:
+                                    match = [col for col in cat_cols if c in col]
+                                    if match:
+                                        mapped_cat = match[0]
+                                        break
+                            elif "customer" in question or "client" in question or "buyer" in question:
+                                for c in ["customer_name", "customer", "client"]:
+                                    match = [col for col in cat_cols if c in col]
+                                    if match:
+                                        mapped_cat = match[0]
+                                        break
+                                        
+                            # Map date
+                            for c in ["date", "time", "year", "month"]:
+                                match = [col for col in date_cols if c in col]
+                                if match:
+                                    mapped_date = match[0]
+                                    break
+                        content = f'{{"numeric_col": "{mapped_num}", "categorical_col": "{mapped_cat}", "date_col": "{mapped_date}"}}'
                     elif "analytics results:" in last_msg_lower:
                         try:
                             idx = last_msg_lower.find("analytics results:")

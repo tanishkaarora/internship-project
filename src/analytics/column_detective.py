@@ -31,7 +31,7 @@ class SmartColumnDetective:
         })
 
         detected_cat = self._find_best_match(q_lower, cat_cols, {
-            "product": ["product", "item", "sku", "name"],
+            "product": ["product", "item", "sku"],
             "category": ["category", "dept", "department", "type"],
             "brand": ["brand", "manufacturer", "supplier"],
             "customer": ["customer", "client", "user", "buyer"],
