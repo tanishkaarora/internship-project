@@ -12,3 +12,4 @@ python-dotenv
 pytest
 langchain-google-genai
 xlrd
+langchain-groq
