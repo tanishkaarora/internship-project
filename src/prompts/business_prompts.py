@@ -72,3 +72,29 @@ Write your answer as a business analyst would:
 - End with 1 actionable recommendation if relevant
 - Maximum 250 words
 - Use bullet points only when listing more than 3 items"""
+
+
+COLUMN_DETECTIVE_PROMPT = """You are a data analyst helper. You need to map a user's question to the correct columns of a pandas DataFrame.
+
+The DataFrame has these columns grouped by type:
+- Numeric columns: {numeric_cols}
+- Categorical columns: {categorical_cols}
+- Date/Temporal columns: {date_cols}
+
+User's question: "{question}"
+
+Your job is to identify:
+1. The most relevant numeric column for the question.
+2. The most relevant categorical column (to group by or analyze).
+3. The most relevant date column (if trend or temporal analysis is needed).
+
+Rules:
+- Select only from the columns listed above.
+- If a column of a certain type is not relevant to the question, return null or an empty string for that field.
+- Return a JSON object with keys: "numeric_col", "categorical_col", "date_col".
+- Do not include any other text, markdown formatting, or explanation. Return ONLY the JSON object.
+
+Example JSON output:
+{{"numeric_col": "sales_amount", "categorical_col": "product_name", "date_col": "date"}}
+"""
+

@@ -205,9 +205,19 @@ python run_tests.py
 
 All tests should pass and print:
 ```text
+Running test_ingester_loads_csv...
 test_ingester_loads_csv passed!
+Running test_ingester_converts_currency...
 test_ingester_converts_currency passed!
+Running test_profile_has_expected_keys...
 test_profile_has_expected_keys passed!
+Running test_detective_rule_based_exact_match...
+test_detective_rule_based_exact_match passed!
+Running test_detective_llm_based_match...
+test_detective_llm_based_match passed!
+Running test_detective_llm_fallback_on_invalid_column...
+test_detective_llm_fallback_on_invalid_column passed!
+
 All tests passed successfully!
 ```
 
@@ -220,12 +230,26 @@ All tests passed successfully!
 | CSV/Excel ingestion + cleaning | ✅ Done |
 | KPI computation (revenue, trend, anomalies) | ✅ Done |
 | Auto Plotly charts (bar, line, histogram, scatter) | ✅ Done |
-| PDF parsing and FAISS indexing |⏳ Week 3 |
-| LangGraph intent routing | ⏳ Week 3 |
+| PDF parsing and FAISS indexing | ✅ Done |
+| LangGraph intent routing | ✅ Done |
 | Streamlit UI (3 tabs: Overview, Charts, Ask) | ✅ Done |
-| Unit tests |⏳ Week 3 |
+| Unit tests (including Smart Column Detective) | ✅ Done |
+| Mini-extension (Smart Column Detective) | ✅ Done |
 | Deployment | ⏳ Week 4 |
-| ADRs (3 required) | ⏳ Week 3 |
+| ADRs (3 required: ADR-001, ADR-002, ADR-003) | ✅ Done |
+
+---
+
+## 🕵️ Mini-Extension: Smart Column Detective
+
+In retail analytics, user queries are conversational (e.g., *"Which category drives the most profit?"* or *"Show me the trend of sales"*). In real-world data, column names are messy and vary across source files (e.g., `product_category`, `units_sold`, `profit_margin`).
+
+The **Smart Column Detective** mini-extension dynamically maps conversational question terms to the actual column names in the uploaded dataset:
+1. **Rule-Based Mapping (Fast Path):** Matches query keywords against exact column names and known retail domain synonyms (e.g., mapping "sales" to `revenue` or `sales_amount`).
+2. **LLM-Based Mapping (Semantic Path):** If heuristics are ambiguous, it queries the LLM with the dataset profile to resolve the target numeric, categorical, and date columns.
+3. **Graceful Fallbacks:** Validates selections against the verified schema, falling back to default columns if matches fail.
+
+It logs and displays mapped column metadata in the UI, keeping the data query flow highly visible and robust.
 
 ---
 

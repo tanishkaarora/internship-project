@@ -163,6 +163,65 @@ with st.sidebar:
             st.success("✅ Insight Copilot ready!")
 
     st.markdown("---")
+    st.markdown("### 💡 Demo Mode")
+    if st.button("📦 Load Sample Datasets", use_container_width=True):
+        with st.spinner("Loading sample dataset and document..."):
+            import os
+            if st.session_state.llm is None:
+                st.session_state.llm = Config.get_llm()
+
+            # Load CSV
+            sample_csv_path = "data/sample_sales.csv"
+            if os.path.exists(sample_csv_path):
+                class MockUploadedFile:
+                    def __init__(self, path):
+                        self.path = path
+                        self.name = os.path.basename(path)
+                        self._file = open(path, "rb")
+                    def read(self, *args, **kwargs):
+                        return self._file.read(*args, **kwargs)
+                    def seek(self, pos):
+                        return self._file.seek(pos)
+
+                ingester = DataIngester()
+                csv_mock = MockUploadedFile(sample_csv_path)
+                try:
+                    df, profile = ingester.ingest(csv_mock)
+                    st.session_state.clean_df = df
+                    st.session_state.data_profile = profile
+                    engine = AnalyticsEngine()
+                    st.session_state.kpis = engine.compute_kpis(df, profile)
+                    st.session_state.charts = generate_charts(df, profile)
+                    st.sidebar.success("✅ Sample CSV loaded: 11 rows")
+                except Exception as e:
+                    st.sidebar.error(f"Error loading CSV: {e}")
+
+            # Load PDF
+            sample_pdf_path = "data/sample_document.pdf"
+            vs = VectorStore()
+            if os.path.exists(sample_pdf_path):
+                try:
+                    processor = DocumentProcessor(
+                        chunk_size=Config.CHUNK_SIZE,
+                        chunk_overlap=Config.CHUNK_OVERLAP
+                    )
+                    docs = processor.load_from_pdf(sample_pdf_path)
+                    chunks = processor.split_documents(docs)
+                    vs.create_vectorstore(chunks)
+                    st.sidebar.success(f"✅ Sample PDF indexed: {len(chunks)} chunks")
+                except Exception as e:
+                    st.sidebar.error(f"Error loading PDF: {e}")
+
+            st.session_state.vector_store = vs
+            st.session_state.graph = CopilotGraphBuilder(
+                llm=st.session_state.llm,
+                vector_store=vs
+            )
+            st.session_state.graph.build()
+            st.sidebar.success("✅ Insight Copilot ready with sample data!")
+            st.rerun()
+
+    st.markdown("---")
     st.markdown("**Example questions:**")
     st.markdown("- Which product has the highest sales?")
     st.markdown("- Show me the revenue trend")
@@ -229,6 +288,14 @@ with tab_chat:
 
                 st.write(result.get("answer", "Sorry, I could not generate an answer. Please try again."))
                 st.caption(f"Route: {result.get('route', 'unknown').upper()} | Processing time: {elapsed:.1f}s")
+
+                # Show Smart Column Detective mapping
+                analytics_res = result.get("analytics_result", "")
+                if analytics_res and "Analysis Metadata:" in analytics_res:
+                    import re
+                    match = re.search(r"\*\(Analysis Metadata: (.*?)\)\*", analytics_res)
+                    if match:
+                        st.info(f"🕵️ {match.group(1)}")
 
                 if result.get("sources"):
                     with st.expander("Sources"):

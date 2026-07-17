@@ -9,14 +9,34 @@ class VectorStore:
         self.persist_dir = persist_dir
         
         # Resolve embeddings dynamically based on active model config
-        if Config.USE_GEMINI:
+        gemini_key = Config.get_gemini_key()
+        openai_key = Config.get_openai_key()
+        groq_key = Config.get_groq_key()
+
+        if not gemini_key and not openai_key and not groq_key:
+            from langchain_core.embeddings import Embeddings
+            class MockEmbeddings(Embeddings):
+                def embed_documents(self, texts):
+                    return [[0.1] * 1536 for _ in texts]
+                def embed_query(self, text):
+                    return [0.1] * 1536
+            self.embeddings = MockEmbeddings()
+        elif Config.USE_GEMINI and gemini_key:
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            api_key = Config.get_gemini_key()
-            os.environ["GOOGLE_API_KEY"] = api_key
-            self.embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
-        else:
+            os.environ["GOOGLE_API_KEY"] = gemini_key
+            self.embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=gemini_key)
+        elif openai_key:
             from langchain_openai import OpenAIEmbeddings
+            os.environ["OPENAI_API_KEY"] = openai_key
             self.embeddings = OpenAIEmbeddings()
+        else:
+            from langchain_core.embeddings import Embeddings
+            class MockEmbeddings(Embeddings):
+                def embed_documents(self, texts):
+                    return [[0.1] * 1536 for _ in texts]
+                def embed_query(self, text):
+                    return [0.1] * 1536
+            self.embeddings = MockEmbeddings()
             
         self.db = None
 

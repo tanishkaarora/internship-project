@@ -2,12 +2,14 @@
 
 from src.state.copilot_state import CopilotState
 from src.analytics.analytics_engine import AnalyticsEngine
+from src.analytics.column_detective import SmartColumnDetective
 import streamlit as st
 
 class AnalyticsNode:
     def __init__(self, llm):
         self.llm = llm
         self.engine = AnalyticsEngine()
+        self.detective = SmartColumnDetective(llm)
 
     def run(self, state: CopilotState) -> CopilotState:
         """
@@ -29,33 +31,44 @@ class AnalyticsNode:
     def _run_analysis(self, question: str, df, profile: dict) -> str:
         """Select and run the right analytics based on question content"""
         q = question.lower()
-        nums = profile["numeric_cols"]
-        cats = profile["cat_cols"]
-        dates = profile["date_cols"]
+        
+        # Dynamically map query terms to columns
+        mapped = self.detective.detect(question, profile)
+        value_col = mapped.get("numeric_col")
+        group_col = mapped.get("categorical_col")
+        date_col = mapped.get("date_col")
 
         results = []
 
+        # Info prefix for user transparency
+        detective_info = (
+            f"Smart Column Detective selected columns: "
+            f"Categorical='{group_col}', Numeric='{value_col}', Date='{date_col}'."
+        )
+        results.append(f"*(Analysis Metadata: {detective_info})*")
+
         # Top/bottom performers
         if any(w in q for w in ["top", "best", "highest", "most"]):
-            if cats and nums:
-                results.append(self.engine.top_n_by_column(df, cats[0], nums[0], ascending=False))
+            if group_col and value_col:
+                results.append(self.engine.top_n_by_column(df, group_col, value_col, ascending=False))
 
         if any(w in q for w in ["bottom", "worst", "lowest", "underperform"]):
-            if cats and nums:
-                results.append(self.engine.top_n_by_column(df, cats[0], nums[0], ascending=True))
+            if group_col and value_col:
+                results.append(self.engine.top_n_by_column(df, group_col, value_col, ascending=True))
 
         # Trend
         if any(w in q for w in ["trend", "over time", "monthly", "growth", "decline", "drop"]):
-            if dates and nums:
-                results.append(self.engine.trend_over_time(df, dates[0], nums[0]))
+            if date_col and value_col:
+                results.append(self.engine.trend_over_time(df, date_col, value_col))
 
         # Anomalies
         if any(w in q for w in ["anomaly", "anomalies", "unusual", "spike", "outlier"]):
-            if nums:
-                results.append(self.engine.detect_anomalies(df, nums[0], cats[0] if cats else None))
+            if value_col:
+                results.append(self.engine.detect_anomalies(df, value_col, group_col))
 
         # Default: full summary
-        if not results:
+        if len(results) == 1:  # Only metadata present
             results.append(self.engine.full_summary(df, profile))
 
         return "\n\n".join(results)
+
