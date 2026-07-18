@@ -77,11 +77,11 @@ The intent router uses the LLM to classify each question — so "which product s
 |-------|-----------|----------------|
 | UI | Streamlit | Full app in Python, no frontend framework needed |
 | Agent orchestration | LangGraph | Conditional routing between nodes — not possible with a simple chain |
-| LLM | Google Gemini 2.0 Flash | Free tier, fast, good at structured output |
+| LLM | Llama 3.1 8B (via Groq) / Gemini | Flexible model choices, default to Groq (Llama 3.1) |
 | Vector database | FAISS (local) | Zero infrastructure, runs in memory, sufficient for single-user |
 | Data processing | pandas | Industry standard, handles messy retail CSVs well |
 | Charts | Plotly Express | Interactive charts in 2–3 lines, native Streamlit support |
-| Embeddings | Google Generative AI | Paired with Gemini, no extra API needed |
+| Embeddings | Google GenAI / Mock Embeddings | Dynamically selected based on active model config |
 
 ---
 
@@ -147,7 +147,7 @@ retail-decision-copilot/
 
 ### Prerequisites
 - Python 3.11+
-- A free Gemini API key — get one at [aistudio.google.com](https://aistudio.google.com)
+- A free Groq API key — get one at [console.groq.com](https://console.groq.com) (or Gemini/OpenAI key)
 
 ### 1. Clone and install
 
