@@ -98,6 +98,36 @@ def init_state():
 
 init_state()
 
+def reset_for_new_upload():
+    """
+    Called every time Process Files is clicked.
+    Clears all derived state so the new file gets a fresh
+    graph, fresh LLM, and fresh chat history.
+
+    Why this matters: if a user uploads File A, asks questions,
+    then uploads File B without refreshing, the graph was built
+    on File A's data profile. Column Detective maps to File A's
+    columns. All analytics answers are wrong for File B.
+    This reset prevents that silent bug.
+    """
+    keys_to_reset = [
+        "graph",
+        "llm",
+        "clean_df",
+        "data_profile",
+        "kpis",
+        "charts",
+        "chat_history",
+        "vector_store",
+        "api_error_warning",
+    ]
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
+    # Re-initialise with defaults
+    init_state()
+
 # ── SIDEBAR — FILE UPLOADS ───────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📁 Upload Datasets")
@@ -114,10 +144,11 @@ with st.sidebar:
     )
 
     if st.button("🚀 Process Files", type="primary", use_container_width=True):
+        # Always reset — ensures a new upload never uses
+        # graph or profile from a previous upload
+        reset_for_new_upload()
         with st.spinner("Setting up Insight Copilot..."):
-            # Initialise LLM (once)
-            if st.session_state.llm is None:
-                st.session_state.llm = Config.get_llm()
+            st.session_state.llm = Config.get_llm()
 
             # Process CSV
             if csv_file:
@@ -130,6 +161,9 @@ with st.sidebar:
                     st.session_state.kpis = engine.compute_kpis(df, profile)
                     st.session_state.charts = generate_charts(df, profile)
                     st.success(f"✅ Data loaded: {len(df):,} rows")
+                    # Show any data quality warnings from validation
+                    for warning in profile.get("warnings", []):
+                        st.warning(f"⚠️ {warning}")
                     if len(df) > st.session_state.get("MAX_ROWS", 100_000):
                         st.warning(
                             f"⚠️ Large dataset ({len(df):,} rows). "
@@ -170,7 +204,7 @@ with st.sidebar:
                 vector_store=vs
             )
             st.session_state.graph.build()
-            st.success("✅ Insight Copilot ready!")
+            st.success("✅ Insight Copilot ready! Previous session cleared.")
 
     st.markdown("---")
     st.markdown("### 💡 Demo Mode")
@@ -276,9 +310,22 @@ with tab_overview:
 # Charts Tab
 with tab_charts:
     if st.session_state.charts:
-        for title, fig in st.session_state.charts:
+        for item in st.session_state.charts:
+            # Support both old (title, fig) and new (title, fig, insight)
+            if len(item) == 3:
+                title, fig, insight = item
+            else:
+                title, fig = item
+                insight = ""
             st.subheader(title)
             st.plotly_chart(fig, use_container_width=True)
+            if insight:
+                st.markdown(
+                    f"<p style='font-size:13px;color:#94a3b8;"
+                    f"margin-top:-8px;margin-bottom:16px;"
+                    f"font-style:italic'>{insight}</p>",
+                    unsafe_allow_html=True
+                )
     else:
         st.info("Upload data to see auto-generated charts.")
 

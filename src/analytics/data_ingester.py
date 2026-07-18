@@ -12,7 +12,9 @@ class DataIngester:
         """
         raw_df = self._load(uploaded_file)
         clean_df = self._clean(raw_df)
+        warnings = self._validate(clean_df)
         profile = self._profile(clean_df)
+        profile["warnings"] = warnings
         return clean_df, profile
 
     def _load(self, uploaded_file) -> pd.DataFrame:
@@ -87,6 +89,72 @@ class DataIngester:
         # Remove full duplicates
         df.drop_duplicates(inplace=True)
         return df
+
+    def _validate(self, df: pd.DataFrame) -> list:
+        """
+        Validates the cleaned DataFrame is usable for analytics.
+        Returns a list of warning strings (empty = all good).
+        Raises ValueError for fatal problems that prevent any analysis.
+        """
+        warnings = []
+
+        # Fatal: too few rows
+        if len(df) == 0:
+            raise ValueError(
+                "The uploaded file has no data rows. "
+                "Please check the file and try again."
+            )
+
+        if len(df) < 3:
+            warnings.append(
+                f"Very small dataset ({len(df)} rows). "
+                "Trends and rankings may not be meaningful."
+            )
+
+        # Fatal: no columns at all
+        if len(df.columns) == 0:
+            raise ValueError(
+                "No columns found after cleaning. "
+                "Please check the file format."
+            )
+
+        # Warning: no numeric columns
+        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        if len(numeric_cols) == 0:
+            warnings.append(
+                "No numeric columns detected after cleaning. "
+                "Analytics (KPIs, trends, rankings) will not be available. "
+                "If your data has numbers, check that values do not contain "
+                "unrecognised currency symbols or text."
+            )
+
+        # Warning: all numeric columns are constant (no variance)
+        for col in numeric_cols:
+            if df[col].nunique() == 1:
+                warnings.append(
+                    f"Column '{col}' has only one unique value "
+                    f"({df[col].iloc[0]}) — rankings will not be meaningful."
+                )
+
+        # Warning: no categorical columns
+        cat_cols = df.select_dtypes(include="object").columns.tolist()
+        if len(cat_cols) == 0:
+            warnings.append(
+                "No categorical columns detected. "
+                "Group-by analysis (by product, category, region) "
+                "will not be available."
+            )
+
+        # Warning: very high null rate in numeric columns
+        for col in numeric_cols:
+            null_pct = df[col].isnull().sum() / len(df) * 100
+            if null_pct > 30:
+                warnings.append(
+                    f"Column '{col}' has {null_pct:.0f}% missing values "
+                    "after cleaning. Results may be unreliable."
+                )
+
+        return warnings
 
     def _profile(self, df: pd.DataFrame) -> dict:
         """Generate a text summary of the data for use in LLM prompts"""

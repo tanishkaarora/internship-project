@@ -22,6 +22,20 @@ class AnalyticsEngine:
         Returns a text table of top/bottom N entries.
         Used by the analytics node when question asks about best/worst performers.
         """
+        # Guard: if group_col has only 1 unique value, ranking is meaningless
+        if df[group_col].nunique() < 2:
+            return (
+                f"Only one unique value in '{group_col}' "
+                f"({df[group_col].iloc[0]}) — no ranking possible."
+            )
+
+        # Guard: if value_col has no variance, all rankings are equal
+        if df[value_col].nunique() < 2:
+            return (
+                f"All rows have the same value in '{value_col}' "
+                f"({df[value_col].iloc[0]:,.2f}) — no ranking possible."
+            )
+
         grouped = df.groupby(group_col)[value_col].sum().reset_index()
         grouped = grouped.sort_values(value_col, ascending=ascending).head(n)
         rows = [f"{rank}. {row[group_col]}: {row[value_col]:,.2f}"

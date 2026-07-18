@@ -42,6 +42,60 @@ class CopilotGraphBuilder:
 
         return CopilotState(**{**state.model_dump(), "retrieved_docs": docs, "rag_context": context})
 
+    def _general_node(self, state: CopilotState) -> CopilotState:
+        """
+        Handles greetings and off-topic questions.
+        Returns a helpful fixed response without touching
+        analytics or FAISS — saves API tokens and avoids
+        confusing data-driven answers to casual questions.
+        """
+        question_lower = state.question.lower().strip()
+
+        # Personalised greeting responses
+        if any(w in question_lower for w in
+               ["hi", "hello", "hey", "good morning",
+                "good evening", "namaste"]):
+            answer = (
+                "Hello! I am your AI Retail Decision Copilot. "
+                "Upload your sales CSV and business documents "
+                "in the sidebar, then ask me things like:\n\n"
+                "- *Which product has the highest revenue?*\n"
+                "- *Show me the sales trend for the last 3 months*\n"
+                "- *What does the strategy report say about Q3?*\n"
+                "- *Which category is underperforming?*\n\n"
+                "What would you like to know about your business?"
+            )
+        elif any(w in question_lower for w in
+                 ["what can you do", "what do you do",
+                  "how do you work", "help", "capabilities"]):
+            answer = (
+                "I can help you with three types of questions:\n\n"
+                "**📊 Analytics** — I analyse your uploaded CSV data "
+                "to find top/bottom performers, trends, anomalies, "
+                "and KPIs.\n\n"
+                "**📄 Documents** — I search your uploaded PDF reports "
+                "and retrieve relevant excerpts with page citations.\n\n"
+                "**🔀 Both** — For questions that need data analysis "
+                "AND document context, I combine both sources.\n\n"
+                "Upload your files in the sidebar to get started."
+            )
+        else:
+            answer = (
+                "I am specialised for retail business analysis. "
+                "I work best with questions about your sales data "
+                "or business documents. Try asking: "
+                "*'Which product has the highest revenue?'* or "
+                "*'What does the report say about our strategy?'*"
+            )
+
+        return CopilotState(
+            **{**state.model_dump(),
+               "answer": answer,
+               "sources": [],
+               "analytics_result": "",
+               "rag_context": ""}
+        )
+
     def _route_edge(self, state: CopilotState) -> str:
         """Conditional edge function — determines which node runs after intent router"""
         return state.route  # "analytics", "rag", or "both"
@@ -60,6 +114,7 @@ class CopilotGraphBuilder:
         builder.add_node("analytics_node", self.analytics_node.run)
         builder.add_node("rag_node",        self._rag_node)
         builder.add_node("synthesiser",    self.synthesiser.synthesise)
+        builder.add_node("general_node",   self._general_node)
 
         # Entry point
         builder.set_entry_point("intent_router")
@@ -72,7 +127,8 @@ class CopilotGraphBuilder:
                 "analytics": "analytics_node",
                 "rag":       "rag_node",
                 "both":      "analytics_node",
-                "unknown":   "rag_node",
+                "general":   "general_node",
+                "unknown":   "general_node",
             }
         )
 
@@ -91,6 +147,7 @@ class CopilotGraphBuilder:
 
         # Synthesiser → END
         builder.add_edge("synthesiser", END)
+        builder.add_edge("general_node", END)
 
         self.graph = builder.compile()
         return self.graph

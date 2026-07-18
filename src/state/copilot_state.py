@@ -14,7 +14,7 @@ class CopilotState(BaseModel):
     question: str
 
     # Routing — set by IntentRouter node
-    route: Literal["analytics", "rag", "both", "unknown"] = "unknown"
+    route: Literal["analytics", "rag", "both", "general", "unknown"] = "unknown"
 
     # Analytics results — set by AnalyticsNode
     analytics_result: str = ""

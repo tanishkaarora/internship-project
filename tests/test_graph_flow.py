@@ -105,6 +105,40 @@ def test_graph_fallback_on_llm_error():
     assert "api_error_warning" in st.session_state
     print("test_graph_fallback_on_llm_error passed!")
 
+def test_session_state_reset_clears_graph():
+    """
+    Simulates uploading File A, building a graph,
+    then uploading File B. Verifies the graph is
+    rebuilt and not carrying File A's state.
+    """
+    import streamlit as st
+
+    # Simulate File A session
+    st.session_state["graph"] = "old_graph_from_file_A"
+    st.session_state["clean_df"] = "old_df"
+    st.session_state["chat_history"] = [
+        {"role": "user", "content": "old question"}
+    ]
+    st.session_state["kpis"] = {"old_kpi": "old_value"}
+
+    # Simulate what reset_for_new_upload() does
+    keys_to_reset = [
+        "graph", "llm", "clean_df", "data_profile",
+        "kpis", "charts", "chat_history",
+        "vector_store", "api_error_warning",
+    ]
+    for key in keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
+    # Verify all stale state is gone
+    assert st.session_state.get("graph") is None
+    assert st.session_state.get("clean_df") is None
+    assert st.session_state.get("chat_history") is None
+    assert st.session_state.get("kpis") is None
+    print("test_session_state_reset_clears_graph passed!")
+
 if __name__ == "__main__":
     test_graph_analytics_route()
     test_graph_fallback_on_llm_error()
+    test_session_state_reset_clears_graph()

@@ -36,6 +36,8 @@ class IntentRouterNode:
             route = "rag"
         elif "analytics" in route_text:
             route = "analytics"
+        elif "general" in route_text:
+            route = "general"
         else:
             route = "rag"  # default fallback
 

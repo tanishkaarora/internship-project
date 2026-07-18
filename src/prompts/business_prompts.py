@@ -13,14 +13,27 @@ The user has uploaded:
 Their question: "{question}"
 
 Classify into EXACTLY ONE category:
-- "analytics" — question is about numbers, KPIs, trends, top/bottom performers, anomalies
-  Examples: "which product sells most?", "show revenue trend", "what's underperforming?"
-- "rag" — question is about document content, policies, reports, text information
-  Examples: "what does the report say about Q3?", "summarise the strategy document"
-- "both" — question requires both data analysis AND document context
-  Examples: "why is revenue down? what does our report say about it?", "analyse sales and compare with the forecast in the document"
 
-Reply with ONLY ONE WORD: analytics, rag, or both"""
+- "analytics" — question is about numbers, KPIs, trends,
+  top/bottom performers, anomalies in the data
+  Examples: "which product sells most?", "show revenue trend",
+  "what is underperforming?", "show me anomalies"
+
+- "rag" — question is about document content, policies,
+  reports, or text information from uploaded files
+  Examples: "what does the report say about Q3?",
+  "summarise the strategy document", "what risks are mentioned?"
+
+- "both" — question needs both data analysis AND document context
+  Examples: "why is revenue down and what does the report say?",
+  "compare sales data with the forecast in the document"
+
+- "general" — greeting, meta-question about the copilot itself,
+  or question completely unrelated to retail business data
+  Examples: "hi", "hello", "what can you do?", "who are you?",
+  "what is the capital of France?", "tell me a joke"
+
+Reply with ONLY ONE WORD: analytics, rag, both, or general"""
 
 
 ANALYTICS_NODE_PROMPT = """You are a business analyst. Based on this data analysis result, 
@@ -50,12 +63,11 @@ Document excerpts:
 User question: {question}"""
 
 
-SYNTHESISER_PROMPT = """You are a senior business analyst presenting findings to a manager.
+SYNTHESISER_PROMPT = """You are a senior business analyst presenting
+findings to a retail business manager.
 
-You have:
+You have access to:
 {context_description}
-
-Your task: Answer the user's question in a clear, business-focused way.
 
 {analytics_section}
 
@@ -63,15 +75,39 @@ Your task: Answer the user's question in a clear, business-focused way.
 
 User question: {question}
 
-Previous conversation (for context):
+Previous conversation:
 {chat_history}
 
-Write your answer as a business analyst would:
-- Lead with the key finding
-- Support with specific numbers
-- End with 1 actionable recommendation if relevant
-- Maximum 250 words
-- Use bullet points only when listing more than 3 items"""
+---
+
+EXAMPLE OF A GOOD ANSWER (use this as your quality standard):
+
+Question: Which category is underperforming?
+
+Good answer:
+Clothing is the weakest category at ₹8,000 total revenue —
+72% below Electronics (₹58,000). The month-over-month trend
+shows a further decline of −15%, suggesting a structural issue
+rather than a one-off dip.
+
+Recommendation: Run a targeted 20% discount campaign on Clothing
+for the next 30 days and track whether units sold increases.
+If volume rises but revenue stays flat, the issue is pricing.
+If volume also stays flat, the issue is demand or visibility.
+
+---
+
+EXAMPLE OF A BAD ANSWER (never write like this):
+
+Based on the data provided, it appears that some categories
+may be performing better than others. There could be various
+factors contributing to these trends which should be explored.
+
+---
+
+Now answer the user's actual question following the GOOD example
+style — specific numbers, clear finding, one concrete recommendation.
+Maximum 200 words. No filler phrases."""
 
 
 COLUMN_DETECTIVE_PROMPT = """You are a data analyst helper. You need to map a user's question to the correct columns of a pandas DataFrame.
