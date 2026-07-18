@@ -77,7 +77,7 @@ The intent router uses the LLM to classify each question — so "which product s
 |-------|-----------|----------------|
 | UI | Streamlit | Full app in Python, no frontend framework needed |
 | Agent orchestration | LangGraph | Conditional routing between nodes — not possible with a simple chain |
-| LLM | Google Gemini 1.5 Flash | Free tier, fast, good at structured output |
+| LLM | Google Gemini 2.0 Flash | Free tier, fast, good at structured output |
 | Vector database | FAISS (local) | Zero infrastructure, runs in memory, sufficient for single-user |
 | Data processing | pandas | Industry standard, handles messy retail CSVs well |
 | Charts | Plotly Express | Interactive charts in 2–3 lines, native Streamlit support |
