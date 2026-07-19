@@ -40,12 +40,36 @@ class AnalyticsNode:
 
         results = []
 
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(
-            "Smart Column Detective — numeric: %s, categorical: %s, date: %s",
-            value_col, group_col, date_col
-        )
+        # Summary / overview request — LLM writes a narrative
+        summary_triggers = [
+            "summarise", "summarize", "summary",
+            "overview", "tell me about", "what does this data",
+            "key insights", "analyse the data", "analyze the data",
+            "what should i know", "what does this tell",
+            "give me a", "overall",
+        ]
+        if any(w in q for w in summary_triggers):
+            # Get full analytics summary and pass to LLM for narrative
+            raw_summary = self.engine.full_summary(df, profile)
+            llm_prompt = f"""You are a business analyst.
+Write a clear, professional 3-paragraph narrative summary
+of this retail dataset. Do NOT use bullet points.
+Write in plain prose like an analyst presenting to a manager.
+
+Dataset analysis:
+{raw_summary}
+
+Structure your narrative as:
+Paragraph 1: What this dataset is and what it covers
+(rows, columns, date range, key metrics)
+Paragraph 2: The most important patterns and findings
+(top performers, trends, notable numbers)
+Paragraph 3: What needs attention and one recommendation
+
+Maximum 180 words total. Be specific with numbers."""
+
+            response = self.llm.invoke(llm_prompt)
+            return response.content
 
         # Top/bottom performers
         if any(w in q for w in ["top", "best", "highest", "most"]):

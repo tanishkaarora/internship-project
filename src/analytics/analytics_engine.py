@@ -8,12 +8,73 @@ class AnalyticsEngine:
     """Computes KPIs, trends, and anomalies from business DataFrames"""
 
     def compute_kpis(self, df: pd.DataFrame, profile: dict) -> dict:
-        """Return a dict of KPI name → value for display as st.metric cards"""
-        kpis = {"Total Rows": f"{len(df):,}"}
-        for col in profile["numeric_cols"][:4]:
-            label = col.replace("_", " ").title()
-            kpis[f"Total {label}"] = f"{df[col].sum():,.2f}"
-            kpis[f"Avg {label}"] = f"{df[col].mean():,.2f}"
+        """
+        Returns exactly 4 KPI cards — the most business-relevant.
+        Priority order:
+          1. Total of the primary revenue/sales/profit metric
+          2. Total rows (record count)
+          3. Total of the second most important metric
+          4. Average of the primary metric
+        """
+        kpis = {}
+        numeric_cols = profile.get("numeric_cols", [])
+
+        if not numeric_cols:
+            kpis["Total Records"] = f"{len(df):,}"
+            return kpis
+
+        # Priority ranking — pick the most business-relevant
+        # numeric column as the primary KPI
+        PRIORITY_KEYWORDS = [
+            "revenue", "sales", "profit", "amount",
+            "gmv", "income", "turnover", "actual",
+            "units_sold", "quantity", "orders",
+            "cost", "spend", "budget", "error",
+        ]
+
+        def priority_score(col: str) -> int:
+            col_lower = col.lower()
+            for i, kw in enumerate(PRIORITY_KEYWORDS):
+                if kw in col_lower:
+                    return i
+            return len(PRIORITY_KEYWORDS)  # lowest priority
+
+        sorted_cols = sorted(numeric_cols, key=priority_score)
+        primary   = sorted_cols[0] if len(sorted_cols) > 0 else None
+        secondary = sorted_cols[1] if len(sorted_cols) > 1 else None
+
+        # KPI 1 — Total records
+        kpis["Total Records"] = f"{len(df):,}"
+
+        # KPI 2 — Total of primary metric
+        if primary:
+            label = primary.replace("_", " ").title()
+            total = df[primary].sum()
+            # Format: use K/M suffix for large numbers
+            if total >= 1_000_000:
+                kpis[f"Total {label}"] = f"{total/1_000_000:.2f}M"
+            elif total >= 1_000:
+                kpis[f"Total {label}"] = f"{total:,.0f}"
+            else:
+                kpis[f"Total {label}"] = f"{total:,.2f}"
+
+        # KPI 3 — Total of secondary metric
+        if secondary:
+            label = secondary.replace("_", " ").title()
+            total = df[secondary].sum()
+            if total >= 1_000_000:
+                kpis[f"Total {label}"] = f"{total/1_000_000:.2f}M"
+            elif total >= 1_000:
+                kpis[f"Total {label}"] = f"{total:,.0f}"
+            else:
+                kpis[f"Total {label}"] = f"{total:,.2f}"
+
+        # KPI 4 — Average of primary metric
+        if primary:
+            label = primary.replace("_", " ").title()
+            avg = df[primary].mean()
+            kpis[f"Avg {label}"] = f"{avg:,.2f}"
+
         return kpis
 
     def top_n_by_column(self, df: pd.DataFrame, group_col: str,

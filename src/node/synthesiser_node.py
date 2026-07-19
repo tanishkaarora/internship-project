@@ -28,10 +28,25 @@ class SynthesiserNode:
         # Format recent chat history
         history_text = ""
         if state.chat_history:
-            recent = state.chat_history[-4:]  # last 2 exchanges
-            history_text = "\n".join(
-                f"{m['role'].upper()}: {m['content'][:200]}" for m in recent
-            )
+            # Only pass the last 2 exchanges (4 messages max)
+            # Truncate each message more aggressively to prevent
+            # previous analytics results from polluting new answers
+            recent = state.chat_history[-4:]
+            history_text_parts = []
+            for m in recent:
+                role = m["role"].upper()
+                # For assistant messages, only take first sentence
+                # to avoid full analytics dumps appearing as context
+                content = m["content"]
+                if role == "ASSISTANT":
+                    # Take only up to the first newline or 120 chars
+                    first_line = content.split("\n")[0][:120]
+                    content = first_line + ("..." if len(content) > 120 else "")
+                else:
+                    # User questions: keep full but cap at 150 chars
+                    content = content[:150]
+                history_text_parts.append(f"{role}: {content}")
+            history_text = "\n".join(history_text_parts)
 
         prompt = SYNTHESISER_PROMPT.format(
             context_description=context_desc,

@@ -128,6 +128,50 @@ class DataIngester:
                 "unrecognised currency symbols or text."
             )
 
+        # Filter out non-metric columns to populate _filtered_id_cols if not already set
+        if not hasattr(self, "_filtered_id_cols"):
+            all_numeric = df.select_dtypes(include="number").columns.tolist()
+            NON_METRIC_KEYWORDS = [
+                "id", "code", "zip", "postal", "pin",
+                "phone", "mobile", "fax", "index",
+                "row", "number", "no", "num", "ref",
+                "key", "hash", "lat", "lon", "latitude",
+                "longitude", "year_of_birth", "dob",
+            ]
+
+            def is_non_metric(col_name: str) -> bool:
+                col_lower = col_name.lower()
+                for kw in NON_METRIC_KEYWORDS:
+                    if (col_lower == kw
+                            or col_lower.endswith(f"_{kw}")
+                            or col_lower.endswith(f" {kw}")
+                            or col_lower.startswith(f"{kw}_")
+                            or col_lower.startswith(f"{kw} ")):
+                        return True
+                if df[col_name].nunique() == len(df) and not pd.api.types.is_float_dtype(df[col_name]):
+                    return True
+                col_min = df[col_name].min()
+                col_max = df[col_name].max()
+                if (1900 <= col_min <= 2100
+                        and 1900 <= col_max <= 2100
+                        and df[col_name].nunique() < 50):
+                    return True
+                return False
+
+            kept_numeric = [col for col in all_numeric if not is_non_metric(col)]
+            if not kept_numeric and all_numeric:
+                kept_numeric = all_numeric
+            self._filtered_id_cols = [c for c in all_numeric if c not in kept_numeric]
+
+        filtered = getattr(self, "_filtered_id_cols", [])
+        if filtered:
+            warnings.append(
+                f"Columns excluded from analytics "
+                f"(detected as IDs/codes, not metrics): "
+                f"{', '.join(filtered)}. "
+                f"These won't appear in rankings or trends."
+            )
+
         # Warning: all numeric columns are constant (no variance)
         for col in numeric_cols:
             if df[col].nunique() == 1:
@@ -158,7 +202,64 @@ class DataIngester:
 
     def _profile(self, df: pd.DataFrame) -> dict:
         """Generate a text summary of the data for use in LLM prompts"""
-        numeric_cols = df.select_dtypes(include="number").columns.tolist()
+        # Get all numeric columns
+        all_numeric = df.select_dtypes(include="number").columns.tolist()
+
+        # Filter out ID, code, and reference columns that are
+        # numeric but not business metrics.
+        # These columns contain identifiers, not measurable quantities.
+        NON_METRIC_KEYWORDS = [
+            "id", "code", "zip", "postal", "pin",
+            "phone", "mobile", "fax", "index",
+            "row", "number", "no", "num", "ref",
+            "key", "hash", "lat", "lon", "latitude",
+            "longitude", "year_of_birth", "dob",
+        ]
+
+        def is_non_metric(col_name: str) -> bool:
+            col_lower = col_name.lower()
+            # Check if any non-metric keyword is a whole word
+            # or suffix in the column name
+            for kw in NON_METRIC_KEYWORDS:
+                # Match: col IS the keyword, or col ENDS with _kw
+                # or col STARTS with kw_
+                if (col_lower == kw
+                        or col_lower.endswith(f"_{kw}")
+                        or col_lower.endswith(f" {kw}")
+                        or col_lower.startswith(f"{kw}_")
+                        or col_lower.startswith(f"{kw} ")):
+                    return True
+            # Also filter columns where all values are unique
+            # (strong signal it's an ID column)
+            if df[col_name].nunique() == len(df) and not pd.api.types.is_float_dtype(df[col_name]):
+                return True
+            # Filter columns where min value looks like a year
+            # (e.g. 1990-2005 range with few unique values = birth year)
+            col_min = df[col_name].min()
+            col_max = df[col_name].max()
+            if (1900 <= col_min <= 2100
+                    and 1900 <= col_max <= 2100
+                    and df[col_name].nunique() < 50):
+                return True
+            return False
+
+        numeric_cols = [
+            col for col in all_numeric
+            if not is_non_metric(col)
+        ]
+
+        # If filtering removed ALL numeric columns,
+        # fall back to original list with a warning
+        if not numeric_cols and all_numeric:
+            numeric_cols = all_numeric
+            # Will be caught by _validate() and shown to user
+
+        filtered_out = [
+            c for c in all_numeric if c not in numeric_cols
+        ]
+        # Store for profile warnings
+        self._filtered_id_cols = filtered_out
+
         cat_cols = df.select_dtypes(include="object").columns.tolist()
         date_cols = df.select_dtypes(include="datetime").columns.tolist()
 
@@ -189,4 +290,5 @@ class DataIngester:
             "date_cols": date_cols,
             "row_count": len(df),
             "col_count": len(df.columns),
+            "filtered_id_cols": getattr(self, "_filtered_id_cols", []),
         }

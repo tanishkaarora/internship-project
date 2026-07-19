@@ -15,9 +15,13 @@ Their question: "{question}"
 Classify into EXACTLY ONE category:
 
 - "analytics" — question is about numbers, KPIs, trends,
-  top/bottom performers, anomalies in the data
+  top/bottom performers, anomalies in the data, OR a request
+  for a general summary/overview of the dataset
   Examples: "which product sells most?", "show revenue trend",
-  "what is underperforming?", "show me anomalies"
+  "what's underperforming?", "summarise the data",
+  "give me an overview", "what are the key insights?",
+  "tell me about the data", "analyse the data",
+  "what does this data tell me?"
 
 - "rag" — question is about document content, policies,
   reports, or text information from uploaded files
@@ -28,10 +32,13 @@ Classify into EXACTLY ONE category:
   Examples: "why is revenue down and what does the report say?",
   "compare sales data with the forecast in the document"
 
-- "general" — greeting, meta-question about the copilot itself,
-  or question completely unrelated to retail business data
-  Examples: "hi", "hello", "what can you do?", "who are you?",
-  "what is the capital of France?", "tell me a joke"
+- "general" — greeting, meta-question about the copilot,
+  question about what the dataset contains at a high level,
+  or question completely unrelated to retail business metrics
+  Examples: "hi", "hello", "what can you do?",
+  "what is the data about?", "describe the dataset",
+  "give me an overview", "what does this file contain?",
+  "summarise the data", "what information is here?"
 
 Reply with ONLY ONE WORD: analytics, rag, both, or general"""
 
@@ -63,51 +70,53 @@ Document excerpts:
 User question: {question}"""
 
 
-SYNTHESISER_PROMPT = """You are a senior business analyst presenting
-findings to a retail business manager.
+SYNTHESISER_PROMPT = """You are a senior business analyst
+answering a retail business manager's question.
 
-You have access to:
+IMPORTANT RULES:
+- Answer ONLY the question asked right now: "{question}"
+- Use ONLY the context provided below for this specific question
+- Do NOT repeat or reference information from previous answers
+  unless the question explicitly asks you to compare or follow up
+- If the current context is empty or irrelevant to the question,
+  say so clearly rather than inventing an answer from memory
+
+---
+
+WHAT YOU HAVE FOR THIS SPECIFIC QUESTION:
 {context_description}
 
 {analytics_section}
 
 {rag_section}
 
-User question: {question}
+---
 
-Previous conversation:
+RECENT CONVERSATION (last 2 exchanges for follow-up context only):
 {chat_history}
 
 ---
 
-EXAMPLE OF A GOOD ANSWER (use this as your quality standard):
+EXAMPLE OF A GOOD ANSWER:
 
-Question: Which category is underperforming?
+Q: Which category is underperforming?
+A: Clothing is the weakest category at ₹8,000 revenue —
+72% below Electronics (₹58,000). Month-over-month trend
+shows a further −15% decline.
+Recommendation: Run a targeted 20% discount on Clothing
+this month and measure whether units sold increases.
 
-Good answer:
-Clothing is the weakest category at ₹8,000 total revenue —
-72% below Electronics (₹58,000). The month-over-month trend
-shows a further decline of −15%, suggesting a structural issue
-rather than a one-off dip.
-
-Recommendation: Run a targeted 20% discount campaign on Clothing
-for the next 30 days and track whether units sold increases.
-If volume rises but revenue stays flat, the issue is pricing.
-If volume also stays flat, the issue is demand or visibility.
+EXAMPLE OF A BAD ANSWER (never do this):
+Repeating "the top 5 order IDs are CA-2018..." in an answer
+about something completely unrelated like "what is the data about".
 
 ---
 
-EXAMPLE OF A BAD ANSWER (never write like this):
+Now answer: "{question}"
 
-Based on the data provided, it appears that some categories
-may be performing better than others. There could be various
-factors contributing to these trends which should be explored.
-
----
-
-Now answer the user's actual question following the GOOD example
-style — specific numbers, clear finding, one concrete recommendation.
-Maximum 200 words. No filler phrases."""
+Lead with the key finding. Support with specific numbers
+from the CURRENT context only. Maximum 150 words.
+One recommendation if relevant. No filler phrases."""
 
 
 COLUMN_DETECTIVE_PROMPT = """You are a data analyst helper. You need to map a user's question to the correct columns of a pandas DataFrame.

@@ -15,6 +15,15 @@ try:
         test_detective_llm_based_match,
         test_detective_llm_fallback_on_invalid_column
     )
+    from tests.test_question_suggester import (
+        test_revenue_col_generates_revenue_questions,
+        test_date_col_generates_trend_question,
+        test_pdf_adds_document_questions,
+        test_max_questions_respected,
+        test_empty_profile_returns_fallback,
+        test_no_duplicate_questions,
+        test_all_suggestions_have_required_keys,
+    )
     
     print("Running test_ingester_loads_csv...")
     test_ingester_loads_csv()
@@ -39,6 +48,16 @@ try:
     print("Running test_detective_llm_fallback_on_invalid_column...")
     test_detective_llm_fallback_on_invalid_column()
     print("test_detective_llm_fallback_on_invalid_column passed!")
+    
+    print("\nRunning question suggester tests...")
+    test_revenue_col_generates_revenue_questions()
+    test_date_col_generates_trend_question()
+    test_pdf_adds_document_questions()
+    test_max_questions_respected()
+    test_empty_profile_returns_fallback()
+    test_no_duplicate_questions()
+    test_all_suggestions_have_required_keys()
+    print("All question suggester tests passed!")
     
     print("\nAll tests passed successfully!")
 except Exception as e:
