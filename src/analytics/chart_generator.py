@@ -471,62 +471,248 @@ def _correlation_heatmap(df: pd.DataFrame,
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
+def _best_grouping_col(
+    df: pd.DataFrame,
+    cat_cols: list,
+    max_unique: int = 50,
+) -> str | None:
+    """
+    Returns the best categorical column to use as a chart
+    grouping dimension.
+
+    Selection criteria (in priority order):
+    1. Must not be an ID column (no _id suffix, not order_id etc.)
+    2. Must have low cardinality (< max_unique unique values)
+    3. Prefer columns with 3-20 unique values (ideal for charts)
+    4. Among qualifying columns, prefer known business dimensions:
+       category > sub_category > region > segment > product_name
+       > city > state > brand > channel
+
+    Returns None if no good grouping column exists.
+    """
+    # Columns that are bad for chart grouping
+    BAD_SUFFIXES  = ("_id", "_key", "_number", "_no", "_ref")
+    BAD_EXACT     = {"id", "index", "idx", "row", "key",
+                     "uuid", "guid", "hash", "serial"}
+    BAD_CONTAINS  = ["phone", "mobile", "fax", "email"]
+
+    # Priority order for known good dimensions
+    PRIORITY_KEYWORDS = [
+        "category", "sub_category", "subcategory",
+        "segment", "type", "class", "grade", "status",
+        "region", "zone", "territory",
+        "brand", "manufacturer",
+        "channel", "source", "medium",
+        "product", "item", "sku",
+        "city", "state", "country",
+        "department", "dept",
+        "store", "branch", "outlet",
+        "salesperson", "rep", "agent",
+    ]
+
+    def score(col: str, n_unique: int) -> int:
+        """Lower score = better (will be sorted ascending)"""
+        col_lower = col.lower()
+        # Priority match
+        for i, kw in enumerate(PRIORITY_KEYWORDS):
+            if kw in col_lower:
+                # Bonus for ideal cardinality (3-20 unique vals)
+                cardinality_bonus = (
+                    0 if 3 <= n_unique <= 20 else
+                    5 if n_unique <= 50 else 20
+                )
+                return i + cardinality_bonus
+        # Unknown column — deprioritise
+        return len(PRIORITY_KEYWORDS) + n_unique
+
+    def is_bad_col(col: str) -> bool:
+        col_lower = col.lower()
+        if col_lower in BAD_EXACT:
+            return True
+        if any(col_lower.endswith(s) for s in BAD_SUFFIXES):
+            return True
+        if any(kw in col_lower for kw in BAD_CONTAINS):
+            return True
+        return False
+
+    # Build list of (col, n_unique, score) for valid candidates
+    candidates = []
+    for col in cat_cols:
+        if is_bad_col(col):
+            continue
+        n_unique = df[col].nunique()
+        if n_unique < 2:
+            continue  # Only 1 value — useless for charts
+        if n_unique > max_unique:
+            continue  # Too many — chart becomes unreadable
+        candidates.append((col, n_unique, score(col, n_unique)))
+
+    if not candidates:
+        return None
+
+    # Sort by score (lower = better) and return best
+    candidates.sort(key=lambda x: x[2])
+    return candidates[0][0]
+
+
+def _best_metric_col(
+    df: pd.DataFrame,
+    numeric_cols: list,
+) -> str | None:
+    METRIC_PRIORITY = [
+        "revenue", "sales", "income", "gmv", "turnover",
+        "profit", "margin", "earnings",
+        "amount", "value", "total",
+        "quantity", "units", "qty", "volume",
+        "discount", "rate",
+        "cost", "spend", "expense",
+        "score", "rating", "nps",
+        "actual", "predicted", "forecast",
+        "error", "variance",
+        "inventory", "stock",
+    ]
+
+    # Keywords that make a numeric column NOT a metric
+    # even though it contains numbers
+    NON_METRIC_KEYWORDS = [
+        "postal", "zip", "pin", "postcode",
+        "phone", "mobile", "fax", "tel",
+        "lat", "lon", "latitude", "longitude",
+        "year_of_birth", "birth_year", "dob",
+        "id", "key", "index", "row",
+        "code", "number", "no", "num", "ref",
+        "serial", "seq", "hash", "uuid",
+    ]
+
+    def is_non_metric(col: str) -> bool:
+        col_lower = col.lower()
+        # Check each keyword as a standalone word in the name
+        for kw in NON_METRIC_KEYWORDS:
+            if (col_lower == kw
+                    or col_lower.startswith(kw + "_")
+                    or col_lower.endswith("_" + kw)
+                    or col_lower == kw):
+                return True
+        # Also reject if all values are unique
+        # (strong signal: ID or reference column)
+        if df[col].nunique() == len(df):
+            return True
+        return False
+
+    def metric_score(col: str) -> int:
+        if is_non_metric(col):
+            return 9999
+        col_lower = col.lower()
+        for i, kw in enumerate(METRIC_PRIORITY):
+            if kw in col_lower:
+                return i
+        return len(METRIC_PRIORITY)
+
+    valid = [c for c in numeric_cols if metric_score(c) < 9999]
+    if not valid:
+        return None
+    return min(valid, key=metric_score)
+
+
 def generate_charts(
     df: pd.DataFrame, profile: dict
-) -> List[Tuple[str, go.Figure, str]]:
+) -> list:
     """
-    Returns list of (title, plotly_figure, insight_text) tuples.
-    Each chart is wrapped in try/except — one failure never kills all charts.
-    insight_text is a one-sentence finding shown below the chart in the UI.
+    Returns list of (title, plotly_figure, insight_text).
+    Each chart uses meaningful grouping dimensions only.
+    One failed chart never kills the rest.
     """
     charts = []
     nums  = profile.get("numeric_cols", [])
     cats  = profile.get("cat_cols", [])
     dates = profile.get("date_cols", [])
 
-    # 1. Top vs Bottom performers — most useful for retail
-    if cats and nums:
+    # Find the best grouping column and best metric column
+    # These are used across multiple charts for consistency
+    best_cat    = _best_grouping_col(df, cats, max_unique=50)
+    best_metric = _best_metric_col(df, nums)
+
+    # Fallback: if no good grouping col with max 50,
+    # try up to 100 unique values
+    if best_cat is None:
+        best_cat = _best_grouping_col(df, cats, max_unique=100)
+
+    # Find second-best grouping col (different from best_cat)
+    remaining_cats = [c for c in cats if c != best_cat]
+    second_cat = _best_grouping_col(
+        df, remaining_cats, max_unique=50
+    )
+
+    # Find second metric
+    remaining_nums = [c for c in nums if c != best_metric]
+    second_metric = _best_metric_col(df, remaining_nums)
+
+    # ── Chart 1: Top vs Bottom Performers ──────────────────
+    # Uses best_cat × best_metric
+    if best_cat and best_metric:
         try:
-            charts.append(_top_bottom_chart(df, cats[0], nums[0]))
-        except Exception as e:
-            # Fall back to simple bar chart
+            charts.append(
+                _top_bottom_chart(df, best_cat, best_metric)
+            )
+        except Exception:
             try:
-                charts.append(_bar_chart(df, cats[0], nums[0]))
+                charts.append(
+                    _bar_chart(df, best_cat, best_metric)
+                )
             except Exception:
                 pass
 
-    # 2. Trend over time
-    if dates and nums:
+    # ── Chart 2: Trend over time ────────────────────────────
+    if dates and best_metric:
         try:
-            charts.append(_trend_chart(df, dates[0], nums[0]))
+            charts.append(
+                _trend_chart(df, dates[0], best_metric)
+            )
         except Exception:
             pass
 
-    # 3. Donut / share chart
-    if cats and nums:
+    # ── Chart 3: Donut / share chart ───────────────────────
+    if best_cat and best_metric:
         try:
-            charts.append(_category_pie(df, cats[0], nums[0]))
+            charts.append(
+                _category_pie(df, best_cat, best_metric)
+            )
         except Exception:
             pass
 
-    # 4. Distribution with mean/median lines
-    if nums:
+    # ── Chart 4: Second metric bar chart ───────────────────
+    # e.g. profit by category (after sales by category)
+    if best_cat and second_metric:
         try:
-            charts.append(_histogram_chart(df, nums[0]))
+            charts.append(
+                _bar_chart(df, best_cat, second_metric)
+            )
         except Exception:
             pass
 
-    # 5. Correlation heatmap
+    # ── Chart 5: Distribution histogram ────────────────────
+    if best_metric:
+        try:
+            charts.append(_histogram_chart(df, best_metric))
+        except Exception:
+            pass
+
+    # ── Chart 6: Second grouping dimension chart ────────────
+    # e.g. sales by region (after sales by category)
+    if second_cat and best_metric:
+        try:
+            charts.append(
+                _bar_chart(df, second_cat, best_metric)
+            )
+        except Exception:
+            pass
+
+    # ── Chart 7: Correlation heatmap ───────────────────────
     if len(nums) >= 3:
         try:
-            charts.append(_correlation_heatmap(df, nums[:6]))
-        except Exception:
-            pass
-
-    # 6. Second numeric vs first (if a second numeric exists)
-    if cats and len(nums) >= 2:
-        try:
-            charts.append(_bar_chart(df, cats[0], nums[1]))
+            charts.append(
+                _correlation_heatmap(df, nums[:6])
+            )
         except Exception:
             pass
 

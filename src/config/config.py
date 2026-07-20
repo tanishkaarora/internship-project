@@ -38,8 +38,34 @@ class Config:
             return os.getenv("GEMINI_API_KEY", "")
 
     # Model — switch between OpenAI, Groq, and Gemini
-    USE_GEMINI = os.getenv("USE_GEMINI", "false").lower() == "true"
-    USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
+    # Auto-detect which LLM to use based on available keys.
+    # Explicit env var takes priority.
+    # If USE_GEMINI/USE_GROQ not set, auto-detect from keys.
+    _use_gemini_env = os.getenv("USE_GEMINI", "").lower()
+    _use_groq_env   = os.getenv("USE_GROQ",   "").lower()
+    _gemini_key_set = bool(os.getenv("GEMINI_API_KEY", "").strip())
+    _groq_key_set   = bool(os.getenv("GROQ_API_KEY",  "").strip())
+
+    if _use_groq_env == "true":
+        # Explicit override: use Groq
+        USE_GEMINI = False
+        USE_GROQ   = True
+    elif _use_gemini_env == "true":
+        # Explicit override: use Gemini
+        USE_GEMINI = True
+        USE_GROQ   = False
+    elif _groq_key_set:
+        # Groq key found in .env — use it automatically
+        USE_GEMINI = False
+        USE_GROQ   = True
+    elif _gemini_key_set:
+        # Gemini key found in .env — use it automatically
+        USE_GEMINI = True
+        USE_GROQ   = False
+    else:
+        # No keys found — MockChatModel fallback
+        USE_GEMINI = False
+        USE_GROQ   = False
     LLM_MODEL = "gemini-1.5-flash" if USE_GEMINI else ("groq:llama-3.1-8b-instant" if USE_GROQ else "openai:gpt-4o-mini")
 
     # Document Processing
@@ -52,37 +78,40 @@ class Config:
 
     @classmethod
     def get_llm(cls):
-        gemini_key = cls.get_gemini_key()
-        groq_key = cls.get_groq_key()
-        openai_key = cls.get_openai_key()
-
-        if not gemini_key and not groq_key and not openai_key:
-            from src.utils.mock_llm import MockChatModel
-            return MockChatModel()
-
-        if cls.USE_GEMINI and gemini_key:
+        if cls.USE_GROQ:
+            groq_key = cls.get_groq_key()
+            if not groq_key:
+                raise ValueError(
+                    "GROQ_API_KEY not found. "
+                    "Add it to your .env file: "
+                    "GROQ_API_KEY=your_key_here"
+                )
+            from langchain_groq import ChatGroq
+            os.environ["GROQ_API_KEY"] = groq_key
+            return ChatGroq(
+                model="llama-3.1-8b-instant",
+                groq_api_key=groq_key,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+        elif cls.USE_GEMINI:
+            gemini_key = cls.get_gemini_key()
+            if not gemini_key:
+                raise ValueError(
+                    "GEMINI_API_KEY not found. "
+                    "Add it to your .env file: "
+                    "GEMINI_API_KEY=your_key_here"
+                )
             from langchain_google_genai import ChatGoogleGenerativeAI
             os.environ["GEMINI_API_KEY"] = gemini_key
-            os.environ["GOOGLE_API_KEY"] = gemini_key
-            return ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=gemini_key)
-        elif cls.USE_GROQ and groq_key:
-            from langchain.chat_models import init_chat_model
-            os.environ["GROQ_API_KEY"] = groq_key
-            return init_chat_model("groq:llama-3.1-8b-instant")
-        elif openai_key:
-            from langchain.chat_models import init_chat_model
-            os.environ["OPENAI_API_KEY"] = openai_key
-            return init_chat_model(cls.LLM_MODEL)
+            os.environ["GOOGLE_API_KEY"]  = gemini_key
+            return ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
+                google_api_key=gemini_key,
+                temperature=0.3,
+                max_tokens=1024,
+            )
         else:
-            # Fallback to whatever key is present
-            from langchain.chat_models import init_chat_model
-            if gemini_key:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                return ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=gemini_key)
-            elif groq_key:
-                os.environ["GROQ_API_KEY"] = groq_key
-                return init_chat_model("groq:llama-3.1-8b-instant")
-            else:
-                os.environ["OPENAI_API_KEY"] = openai_key
-                return init_chat_model(cls.LLM_MODEL)
+            from src.utils.mock_llm import MockChatModel
+            return MockChatModel()
 

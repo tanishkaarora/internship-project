@@ -131,45 +131,110 @@ class DataIngester:
         # Filter out non-metric columns to populate _filtered_id_cols if not already set
         if not hasattr(self, "_filtered_id_cols"):
             all_numeric = df.select_dtypes(include="number").columns.tolist()
-            NON_METRIC_KEYWORDS = [
-                "id", "code", "zip", "postal", "pin",
-                "phone", "mobile", "fax", "index",
-                "row", "number", "no", "num", "ref",
-                "key", "hash", "lat", "lon", "latitude",
-                "longitude", "year_of_birth", "dob",
-            ]
-
             def is_non_metric(col_name: str) -> bool:
+                """
+                Returns True only for columns that are pure technical
+                identifiers with zero analytical value.
+
+                EXCLUDED (true IDs — sequential numbers, no meaning):
+                  row_id, order_id, customer_id, product_id,
+                  transaction_id, record_id, index, row_number
+
+                KEPT (location — useful for geographic analysis):
+                  postal_code, zip_code, pin_code, city, state,
+                  region, country, lat, lon
+
+                KEPT (all other numerics):
+                  sales, revenue, profit, quantity, price, discount,
+                  rating, score, age, year, etc.
+                """
                 col_lower = col_name.lower()
-                for kw in NON_METRIC_KEYWORDS:
-                    if (col_lower == kw
-                            or col_lower.endswith(f"_{kw}")
-                            or col_lower.endswith(f" {kw}")
-                            or col_lower.startswith(f"{kw}_")
-                            or col_lower.startswith(f"{kw} ")):
-                        return True
-                if df[col_name].nunique() == len(df) and not pd.api.types.is_float_dtype(df[col_name]):
+
+                # --- Explicit KEEP list — never exclude these ---
+                # Location columns are valuable for geo analysis
+                ALWAYS_KEEP = [
+                    "postal", "zip", "pin", "postcode",
+                    "city", "state", "region", "country",
+                    "district", "province", "territory",
+                    "latitude", "longitude", "lat", "lon",
+                    "location", "address", "area", "zone",
+                    "store", "branch", "outlet", "warehouse",
+                ]
+                if any(kw in col_lower for kw in ALWAYS_KEEP):
+                    return False  # Keep this column
+
+                # --- True ID columns — exclude these ---
+                # These are sequential row numbers or surrogate keys
+                # with no analytical meaning
+                TRUE_ID_PATTERNS = [
+                    # Exact matches
+                    "id", "index", "idx", "key",
+                    "row_id", "row_number", "rowid",
+                    "record_id", "record_number",
+                    "serial", "seq", "sequence",
+                    "uuid", "guid", "hash",
+                    # Suffix patterns: order_id, customer_id, etc.
+                ]
+
+                # Check exact column name matches
+                if col_lower in TRUE_ID_PATTERNS:
                     return True
-                col_min = df[col_name].min()
-                col_max = df[col_name].max()
-                if (1900 <= col_min <= 2100
-                        and 1900 <= col_max <= 2100
-                        and df[col_name].nunique() < 50):
+
+                # Check if column name ENDS with _id or _key
+                # This catches order_id, customer_id, product_id
+                # but NOT city, state, region
+                if col_lower.endswith("_id") or col_lower.endswith("_key"):
                     return True
-                return False
+
+                # Check if column name IS just "id" or starts with "id_"
+                if col_lower == "id" or col_lower.startswith("id_"):
+                    return True
+
+                # Check for phone/fax numbers — numeric but not metrics
+                CONTACT_PATTERNS = ["phone", "mobile", "fax", "tel",
+                                    "contact", "whatsapp"]
+                if any(kw in col_lower for kw in CONTACT_PATTERNS):
+                    return True
+
+                # Last resort: if EVERY value in the column is unique
+                # AND the column name contains "number" or "no" or "num"
+                # it is probably a reference number
+                NUMBER_SUFFIXES = ["_number", "_no", "_num", "_ref",
+                                   "_code" ]
+                # But only if it also looks like a sequential ID
+                # (all unique values that are integers)
+                if any(col_lower.endswith(s) for s in NUMBER_SUFFIXES):
+                    try:
+                        # Check if values look like sequential integers
+                        col_vals = df[col_name].dropna()
+                        is_int_like = (col_vals == col_vals.astype(int)).all()
+                        all_unique  = col_vals.nunique() == len(col_vals)
+                        min_val     = col_vals.min()
+                        max_val     = col_vals.max()
+                        # Sequential: min is ~1 and max equals row count
+                        looks_sequential = (
+                            min_val <= 10 and
+                            abs(max_val - len(df)) < len(df) * 0.1
+                        )
+                        if is_int_like and all_unique and looks_sequential:
+                            return True
+                    except Exception:
+                        pass
+
+                return False  # Keep everything else by default
 
             kept_numeric = [col for col in all_numeric if not is_non_metric(col)]
             if not kept_numeric and all_numeric:
                 kept_numeric = all_numeric
             self._filtered_id_cols = [c for c in all_numeric if c not in kept_numeric]
 
+        # Log filtered columns at debug level only —
+        # users do not need to see this
+        import logging
         filtered = getattr(self, "_filtered_id_cols", [])
         if filtered:
-            warnings.append(
-                f"Columns excluded from analytics "
-                f"(detected as IDs/codes, not metrics): "
-                f"{', '.join(filtered)}. "
-                f"These won't appear in rankings or trends."
+            logging.getLogger(__name__).debug(
+                "Filtered non-metric columns: %s", filtered
             )
 
         # Warning: all numeric columns are constant (no variance)
@@ -217,31 +282,96 @@ class DataIngester:
         ]
 
         def is_non_metric(col_name: str) -> bool:
+            """
+            Returns True only for columns that are pure technical
+            identifiers with zero analytical value.
+
+            EXCLUDED (true IDs — sequential numbers, no meaning):
+              row_id, order_id, customer_id, product_id,
+              transaction_id, record_id, index, row_number
+
+            KEPT (location — useful for geographic analysis):
+              postal_code, zip_code, pin_code, city, state,
+              region, country, lat, lon
+
+            KEPT (all other numerics):
+              sales, revenue, profit, quantity, price, discount,
+              rating, score, age, year, etc.
+            """
             col_lower = col_name.lower()
-            # Check if any non-metric keyword is a whole word
-            # or suffix in the column name
-            for kw in NON_METRIC_KEYWORDS:
-                # Match: col IS the keyword, or col ENDS with _kw
-                # or col STARTS with kw_
-                if (col_lower == kw
-                        or col_lower.endswith(f"_{kw}")
-                        or col_lower.endswith(f" {kw}")
-                        or col_lower.startswith(f"{kw}_")
-                        or col_lower.startswith(f"{kw} ")):
-                    return True
-            # Also filter columns where all values are unique
-            # (strong signal it's an ID column)
-            if df[col_name].nunique() == len(df) and not pd.api.types.is_float_dtype(df[col_name]):
+
+            # --- Explicit KEEP list — never exclude these ---
+            # Location columns are valuable for geo analysis
+            ALWAYS_KEEP = [
+                "postal", "zip", "pin", "postcode",
+                "city", "state", "region", "country",
+                "district", "province", "territory",
+                "latitude", "longitude", "lat", "lon",
+                "location", "address", "area", "zone",
+                "store", "branch", "outlet", "warehouse",
+            ]
+            if any(kw in col_lower for kw in ALWAYS_KEEP):
+                return False  # Keep this column
+
+            # --- True ID columns — exclude these ---
+            # These are sequential row numbers or surrogate keys
+            # with no analytical meaning
+            TRUE_ID_PATTERNS = [
+                # Exact matches
+                "id", "index", "idx", "key",
+                "row_id", "row_number", "rowid",
+                "record_id", "record_number",
+                "serial", "seq", "sequence",
+                "uuid", "guid", "hash",
+                # Suffix patterns: order_id, customer_id, etc.
+            ]
+
+            # Check exact column name matches
+            if col_lower in TRUE_ID_PATTERNS:
                 return True
-            # Filter columns where min value looks like a year
-            # (e.g. 1990-2005 range with few unique values = birth year)
-            col_min = df[col_name].min()
-            col_max = df[col_name].max()
-            if (1900 <= col_min <= 2100
-                    and 1900 <= col_max <= 2100
-                    and df[col_name].nunique() < 50):
+
+            # Check if column name ENDS with _id or _key
+            # This catches order_id, customer_id, product_id
+            # but NOT city, state, region
+            if col_lower.endswith("_id") or col_lower.endswith("_key"):
                 return True
-            return False
+
+            # Check if column name IS just "id" or starts with "id_"
+            if col_lower == "id" or col_lower.startswith("id_"):
+                return True
+
+            # Check for phone/fax numbers — numeric but not metrics
+            CONTACT_PATTERNS = ["phone", "mobile", "fax", "tel",
+                                "contact", "whatsapp"]
+            if any(kw in col_lower for kw in CONTACT_PATTERNS):
+                return True
+
+            # Last resort: if EVERY value in the column is unique
+            # AND the column name contains "number" or "no" or "num"
+            # it is probably a reference number
+            NUMBER_SUFFIXES = ["_number", "_no", "_num", "_ref",
+                               "_code" ]
+            # But only if it also looks like a sequential ID
+            # (all unique values that are integers)
+            if any(col_lower.endswith(s) for s in NUMBER_SUFFIXES):
+                try:
+                    # Check if values look like sequential integers
+                    col_vals = df[col_name].dropna()
+                    is_int_like = (col_vals == col_vals.astype(int)).all()
+                    all_unique  = col_vals.nunique() == len(col_vals)
+                    min_val     = col_vals.min()
+                    max_val     = col_vals.max()
+                    # Sequential: min is ~1 and max equals row count
+                    looks_sequential = (
+                        min_val <= 10 and
+                        abs(max_val - len(df)) < len(df) * 0.1
+                    )
+                    if is_int_like and all_unique and looks_sequential:
+                        return True
+                except Exception:
+                    pass
+
+            return False  # Keep everything else by default
 
         numeric_cols = [
             col for col in all_numeric

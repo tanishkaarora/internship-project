@@ -7,38 +7,43 @@ from src.config.config import Config
 class VectorStore:
     def __init__(self, persist_dir: str = "faiss_index"):
         self.persist_dir = persist_dir
-        
-        # Resolve embeddings dynamically based on active model config
-        gemini_key = Config.get_gemini_key()
-        openai_key = Config.get_openai_key()
-        groq_key = Config.get_groq_key()
-
-        if not gemini_key and not openai_key and not groq_key:
-            from langchain_core.embeddings import Embeddings
-            class MockEmbeddings(Embeddings):
-                def embed_documents(self, texts):
-                    return [[0.1] * 1536 for _ in texts]
-                def embed_query(self, text):
-                    return [0.1] * 1536
-            self.embeddings = MockEmbeddings()
-        elif Config.USE_GEMINI and gemini_key:
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-            os.environ["GOOGLE_API_KEY"] = gemini_key
-            self.embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=gemini_key)
-        elif openai_key:
-            from langchain_openai import OpenAIEmbeddings
-            os.environ["OPENAI_API_KEY"] = openai_key
-            self.embeddings = OpenAIEmbeddings()
-        else:
-            from langchain_core.embeddings import Embeddings
-            class MockEmbeddings(Embeddings):
-                def embed_documents(self, texts):
-                    return [[0.1] * 1536 for _ in texts]
-                def embed_query(self, text):
-                    return [0.1] * 1536
-            self.embeddings = MockEmbeddings()
-            
         self.db = None
+        self.embeddings = self._load_embeddings()
+
+    def _load_embeddings(self):
+        """
+        Load embeddings model.
+        Priority:
+        1. BGE-small via sentence-transformers (free, local,
+           works with any LLM including Groq)
+        2. OpenAI embeddings (if OPENAI_API_KEY set)
+        3. Google embeddings (if GEMINI_API_KEY set)
+        """
+        try:
+            from langchain_community.embeddings import (
+                HuggingFaceEmbeddings
+            )
+            return HuggingFaceEmbeddings(
+                model_name="BAAI/bge-small-en-v1.5",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "HuggingFace embeddings failed (%s). "
+                "Falling back to OpenAI embeddings.", e
+            )
+            try:
+                from langchain_openai import OpenAIEmbeddings
+                return OpenAIEmbeddings()
+            except Exception:
+                from langchain_google_genai import (
+                    GoogleGenerativeAIEmbeddings
+                )
+                return GoogleGenerativeAIEmbeddings(
+                    model="models/embedding-001"
+                )
 
     def create_vectorstore(self, chunks):
         self.db = FAISS.from_documents(chunks, self.embeddings)

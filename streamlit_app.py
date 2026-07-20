@@ -763,25 +763,41 @@ with st.sidebar:
 
 # ── Header ───────────────────────────────────────────────────────────────────
 data_ready = st.session_state.get("data_ready", False)
-is_online  = bool(
-    st.session_state.get("gemini_api_key") or
-    st.session_state.get("groq_api_key")
+import os as _os
+is_online = bool(
+    st.session_state.get("gemini_api_key")
+    or st.session_state.get("groq_api_key")
+    or _os.getenv("GEMINI_API_KEY", "").strip()
+    or _os.getenv("GROQ_API_KEY", "").strip()
 )
 
-if is_online and data_ready:
+# Determine which LLM is active
+import os as _os
+from src.config.config import Config as _Cfg
+
+if data_ready and _Cfg.USE_GROQ:
     status_html = (
         '<span class="status-badge">'
-        '<span class="status-badge-dot"></span>Ready</span>'
+        '<span class="status-badge-dot"></span>'
+        'Live · Groq Llama 3.1</span>'
+    )
+elif data_ready and _Cfg.USE_GEMINI:
+    status_html = (
+        '<span class="status-badge">'
+        '<span class="status-badge-dot"></span>'
+        'Live · Gemini Flash</span>'
     )
 elif data_ready:
     status_html = (
-        '<span class="status-badge">'
-        '<span class="status-badge-dot"></span>Offline mode</span>'
+        '<span class="status-badge status-badge-offline">'
+        '<span class="status-badge-dot"></span>'
+        'Offline — add GROQ_API_KEY to .env</span>'
     )
 else:
     status_html = (
         '<span class="status-badge status-badge-offline">'
-        '<span class="status-badge-dot"></span>Awaiting data</span>'
+        '<span class="status-badge-dot"></span>'
+        'Upload data to begin</span>'
     )
 
 st.markdown(f"""
@@ -814,8 +830,18 @@ if st.session_state.get("show_settings", False):
     with st.expander("⚙️ Settings — API Keys", expanded=True):
         col_a, col_b = st.columns(2)
         with col_a:
+            groq_key = st.text_input(
+                "Groq API Key",
+                type="password",
+                value=st.session_state.get("groq_api_key", ""),
+                placeholder="gsk_...",
+                help="Free at console.groq.com — no credit card needed"
+            )
+            if groq_key:
+                st.session_state["groq_api_key"] = groq_key
+        with col_b:
             gemini_key = st.text_input(
-                "Gemini API Key",
+                "Gemini API Key (alternative)",
                 type="password",
                 value=st.session_state.get("gemini_api_key", ""),
                 placeholder="AIza...",
@@ -823,20 +849,13 @@ if st.session_state.get("show_settings", False):
             )
             if gemini_key:
                 st.session_state["gemini_api_key"] = gemini_key
-        with col_b:
-            groq_key = st.text_input(
-                "Groq API Key (alternative, free)",
-                type="password",
-                value=st.session_state.get("groq_api_key", ""),
-                placeholder="gsk_...",
-                help="Free at console.groq.com"
-            )
-            if groq_key:
-                st.session_state["groq_api_key"] = groq_key
 
         use_groq = st.toggle(
-            "Use Groq instead of Gemini",
-            value=st.session_state.get("use_groq_toggle", False)
+            "Use Groq (recommended)",
+            value=st.session_state.get(
+                "use_groq_toggle",
+                True  # Default to True since user uses Groq
+            )
         )
         st.session_state["use_groq_toggle"] = use_groq
 
@@ -956,27 +975,21 @@ with tab_overview:
 
             profile = st.session_state.data_profile
             warnings = profile.get("warnings", [])
-            filtered_ids = profile.get("filtered_id_cols", [])
 
-            # Show filtered ID columns as a subtle caption,
-            # not a loud warning
-            if filtered_ids:
-                filtered_labels = ", ".join(
-                    f"`{c}`" for c in filtered_ids
-                )
-                st.caption(
-                    f"ℹ️ {filtered_labels} "
-                    f"{'was' if len(filtered_ids) == 1 else 'were'} "
-                    f"detected as ID/code columns and excluded from "
-                    f"analytics. Only business metrics are used."
-                )
+            # Only show warnings that are genuinely important
+            # to the user — skip internal filtering messages
+            SKIP_PHRASES = [
+                "excluded from analytics",
+                "detected as id",
+                "detected as ids",
+                "won't appear in rankings",
+                "id/code columns",
+            ]
 
-            # Show other warnings (low row count, no numeric cols)
-            # as small info boxes, not yellow warnings
             for w in warnings:
-                # Skip the filtered_id warning — handled above
-                if "excluded from analytics" not in w:
-                    st.info(f"ℹ️ {w}", icon=None)
+                w_lower = w.lower()
+                if not any(phrase in w_lower for phrase in SKIP_PHRASES):
+                    st.info(f"ℹ️ {w}")
 
 
 # ── Tab 2: Charts ────────────────────────────────────────────────────────────

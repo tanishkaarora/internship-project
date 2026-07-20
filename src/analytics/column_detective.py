@@ -35,7 +35,11 @@ class SmartColumnDetective:
             "category": ["category", "dept", "department", "type"],
             "brand": ["brand", "manufacturer", "supplier"],
             "customer": ["customer", "client", "user", "buyer"],
-            "region": ["region", "store", "location", "city", "country"]
+            "region": ["region", "zone", "area", "district"],
+            "postal_code": ["postal", "zip", "pin", "postcode"],
+            "city":        ["city", "town", "municipality"],
+            "state":       ["state", "province", "territory"],
+            "country":     ["country", "nation"]
         })
 
         detected_date = self._find_best_match(q_lower, date_cols, {

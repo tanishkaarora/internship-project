@@ -1,159 +1,207 @@
 """
-Generates contextual suggested questions based on what
-columns were detected in the uploaded dataset and whether
-a PDF document was indexed.
-
-No LLM needed — pure rule-based logic.
-Runs instantly after every file upload.
+Generates contextual suggested questions from a data profile.
+Only generates questions that are logically meaningful —
+never asks about IDs, codes, or nonsensical column combos.
 """
 
-from typing import List
+from typing import List, Optional
 
 
-# Maps column name keywords → suggested question templates
-# {col} gets replaced with the actual column name found
-NUMERIC_TEMPLATES = {
-    # Revenue / Sales
-    "revenue":  [
-        "Which product has the highest revenue?",
-        "Show me the revenue trend over time",
-        "Which category contributes most to total revenue?",
-        "Are there any anomalies in revenue?",
-        "What is the revenue breakdown by category?",
-    ],
-    "sales": [
-        "Which product has the highest sales?",
-        "Show me the sales trend over time",
-        "Which category is underperforming in sales?",
-        "What are the top 5 products by sales?",
-        "Are there any anomalies in sales data?",
-    ],
-    "profit": [
-        "Which product is most profitable?",
-        "Show me the profit trend over time",
-        "Which category has the lowest profit margin?",
-        "What are the bottom 5 products by profit?",
-        "Are there unusual spikes or drops in profit?",
-    ],
-    "units": [
-        "Which product sells the most units?",
-        "Show me the units sold trend",
-        "Which category moves the highest volume?",
-        "What products have the lowest units sold?",
-        "Are there anomalies in units sold?",
-    ],
-    "quantity": [
-        "Which product has the highest quantity sold?",
-        "Show me quantity sold over time",
-        "Which items have critically low quantities?",
-        "What is the quantity distribution?",
-    ],
-    "price": [
-        "What is the average price across products?",
-        "Which product has the highest price?",
-        "Show me the price distribution",
-        "Are there any pricing anomalies?",
-    ],
-    "cost": [
-        "Which product has the highest cost?",
-        "Show me cost trends over time",
-        "Which category has the highest cost?",
-        "Are there anomalies in costs?",
-    ],
-    "inventory": [
-        "Which products are low on inventory?",
-        "Show me inventory levels by category",
-        "Which items need immediate restocking?",
-        "Are there any inventory anomalies?",
-    ],
-    "discount": [
-        "Which products have the highest discount?",
-        "What is the average discount across categories?",
-        "Show me discount trends over time",
-    ],
-    "orders": [
-        "How many orders per category?",
-        "Show me order trends over time",
-        "Which product has the most orders?",
-    ],
-}
+# ── Column classification helpers ────────────────────────────────────────────
 
-CATEGORICAL_TEMPLATES = {
-    "category": [
-        "Which category is performing best?",
-        "Which category is underperforming?",
-        "Compare revenue across all categories",
-    ],
-    "product": [
-        "What are the top 5 products?",
-        "What are the bottom 5 products?",
-        "Which product should we prioritise?",
-    ],
-    "region": [
-        "Which region has the highest sales?",
-        "Which region is underperforming?",
-        "Compare performance across regions",
-    ],
-    "store": [
-        "Which store has the highest revenue?",
-        "Which store needs attention?",
-        "Compare performance across stores",
-    ],
-    "customer": [
-        "Who are the top customers by revenue?",
-        "Which customer segment is most valuable?",
-        "Show customer distribution by category",
-    ],
-    "segment": [
-        "Which customer segment drives most revenue?",
-        "Compare segments by profitability",
-    ],
-    "channel": [
-        "Which sales channel performs best?",
-        "Compare online vs offline channels",
-    ],
-    "brand": [
-        "Which brand has the highest sales?",
-        "Compare brand performance",
-    ],
-}
-
-DATE_TEMPLATES = [
-    "Show me the trend over time",
-    "What month had the highest sales?",
-    "Is there a seasonal pattern in the data?",
-    "Show month-over-month growth rate",
-    "What was the best performing period?",
+# Columns that should NEVER be used as a grouping dimension
+# in suggested questions (they are IDs or reference numbers)
+NON_GROUPING_KEYWORDS = [
+    "id", "key", "uuid", "guid", "hash",
+    "index", "idx", "row", "serial", "seq",
+    "number", "ref", "code", "num", "no",
+    "phone", "mobile", "fax", "email",
+    "order_id", "customer_id", "product_id",
+    "transaction_id", "record_id",
+    "customer_name", "customer name", "client_name", "client name",
+    "postal_code", "postal", "zip", "zip_code", "postcode", "pincode",
 ]
 
-DOCUMENT_TEMPLATES = [
-    "Summarise the uploaded document",
-    "What are the key findings in the report?",
-    "What risks are mentioned in the document?",
-    "What recommendations does the report make?",
-    "What does the document say about strategy?",
+# Columns that ARE good grouping dimensions
+GOOD_GROUPING_KEYWORDS = [
+    "category", "sub_category", "subcategory",
+    "product", "item", "sku", "brand",
+    "region", "state", "city", "country", "zone",
+    "postal", "zip", "postcode", "district",
+    "store", "branch", "outlet", "channel",
+    "segment", "customer_type", "customer_segment",
+    "department", "dept",
+    "salesperson", "rep", "agent", "manager",
+    "month", "quarter", "year", "week",
+    "status", "type", "class", "grade",
 ]
 
-GENERAL_FALLBACK = [
-    "Give me an overview of this dataset",
-    "What are the most important insights?",
-    "What should I focus on first?",
-    "Are there any problems I should know about?",
-    "What does this data tell me about my business?",
+# Columns that ARE good numeric metrics
+GOOD_METRIC_KEYWORDS = [
+    "sales", "revenue", "profit", "amount", "income",
+    "quantity", "units", "qty", "orders", "count",
+    "discount", "margin", "cost", "price", "rate",
+    "spend", "budget", "gmv", "aov", "clv",
+    "score", "rating", "nps", "satisfaction",
+    "actual", "predicted", "forecast", "target",
+    "error", "accuracy", "variance",
+    "inventory", "stock", "reorder",
+    "visits", "clicks", "impressions", "conversions",
+]
+
+# Location columns — get geographic question templates
+LOCATION_KEYWORDS = [
+    "postal", "zip", "postcode", "pincode",
+    "city", "state", "region", "country",
+    "district", "province", "territory", "zone",
+    "area", "location",
 ]
 
 
-def _match_col(col_name: str, templates: dict) -> List[str]:
+def _is_good_grouping(col: str) -> bool:
     """
-    Check if any keyword from templates matches the column name.
-    Returns list of matched question strings, or empty list.
+    Returns True if this column is a meaningful grouping
+    dimension for analytics questions.
+    Rejects ID columns, reference numbers, pure codes.
     """
-    col_lower = col_name.lower()
-    for keyword, questions in templates.items():
-        if keyword in col_lower:
-            return questions
-    return []
+    col_lower = col.lower()
 
+    # Explicit reject: ends with _id or _key
+    if col_lower.endswith("_id") or col_lower.endswith("_key"):
+        return False
+
+    # Explicit reject: is exactly "id" or "index"
+    if col_lower in ("id", "index", "idx", "key", "row", "no"):
+        return False
+
+    # Explicit reject: ends with name (except product/item name)
+    if col_lower == "name" or col_lower.endswith("_name") or col_lower.endswith(" name"):
+        if "product" not in col_lower and "item" not in col_lower:
+            return False
+
+    # Explicit reject: contains non-grouping keywords
+    for kw in NON_GROUPING_KEYWORDS:
+        if col_lower == kw:
+            return False
+
+    # Explicit accept: matches known good grouping column
+    for kw in GOOD_GROUPING_KEYWORDS:
+        if kw in col_lower:
+            return True
+
+    # Explicit accept: location columns
+    for kw in LOCATION_KEYWORDS:
+        if kw in col_lower:
+            return True
+
+    # Default: allow — better to include than exclude
+    return True
+
+
+def _is_good_metric(col: str) -> bool:
+    """
+    Returns True if this column is a meaningful numeric metric.
+    """
+    col_lower = col.lower()
+
+    # Reject IDs even if numeric
+    if col_lower.endswith("_id") or col_lower == "id":
+        return False
+
+    # Accept known metric keywords
+    for kw in GOOD_METRIC_KEYWORDS:
+        if kw in col_lower:
+            return True
+
+    # Default: allow (unknown columns may still be metrics)
+    return True
+
+
+def _is_location(col: str) -> bool:
+    col_lower = col.lower()
+    return any(kw in col_lower for kw in LOCATION_KEYWORDS)
+
+
+def _col_label(col: str) -> str:
+    """Human-readable column label."""
+    return col.replace("_", " ").title()
+
+
+# ── Question templates ───────────────────────────────────────────────────────
+
+def _questions_for_grouping_x_metric(
+    group_col: str,
+    metric_col: str,
+    is_location_col: bool = False,
+) -> list:
+    g = _col_label(group_col)
+    m = _col_label(metric_col)
+
+    if is_location_col:
+        return [
+            f"Which {g} drives the most {m}?",
+            f"Which {g} is underperforming — where should we focus?",
+        ]
+
+    # Business-analyst style questions per metric type
+    m_lower = metric_col.lower()
+
+    if any(w in m_lower for w in ["profit", "margin"]):
+        return [
+            f"Which {g} is most profitable?",
+            f"Which {g} has the lowest profit — should we cut it?",
+        ]
+    elif any(w in m_lower for w in ["sales", "revenue", "amount", "income"]):
+        return [
+            f"Which {g} drives the most revenue?",
+            f"Which {g} is underperforming in sales?",
+        ]
+    elif any(w in m_lower for w in ["quantity", "units", "qty", "volume"]):
+        return [
+            f"Which {g} sells the most units?",
+            f"Which {g} has the lowest volume?",
+        ]
+    elif any(w in m_lower for w in ["discount"]):
+        return [
+            f"Which {g} gets the highest discounts?",
+            f"Is discounting hurting profit in any {g}?",
+        ]
+    elif any(w in m_lower for w in ["cost", "spend", "expense"]):
+        return [
+            f"Which {g} has the highest cost?",
+            f"Where can we reduce costs?",
+        ]
+    elif any(w in m_lower for w in ["error", "variance", "accuracy"]):
+        return [
+            f"Which {g} has the highest forecast error?",
+            f"Which {g} is hardest to predict?",
+        ]
+    else:
+        return [
+            f"Which {g} has the highest {m}?",
+            f"Which {g} is underperforming?",
+        ]
+
+
+def _trend_question(metric_col: str) -> str:
+    m = _col_label(metric_col)
+    return f"Show me {m} trend over time"
+
+
+def _anomaly_question(metric_col: str) -> str:
+    m = _col_label(metric_col)
+    return f"Are there any anomalies in {m}?"
+
+
+def _summary_question() -> str:
+    return "Summarise the data"
+
+
+def _overview_question() -> str:
+    return "What are the key insights?"
+
+
+# ── Main entry point ─────────────────────────────────────────────────────────
 
 def generate_suggestions(
     profile: dict,
@@ -163,21 +211,16 @@ def generate_suggestions(
     """
     Generate contextual suggested questions from a data profile.
 
-    Args:
-        profile:       Output of DataIngester._profile() — contains
-                       numeric_cols, cat_cols, date_cols lists.
-        has_pdf:       Whether a PDF document has been indexed.
-        max_questions: Maximum number of suggestions to return.
-
-    Returns:
-        List of dicts: {
-            "question": str,   — the question text
-            "icon":     str,   — emoji prefix
-            "route":    str,   — expected route (for display hint)
-        }
+    Rules:
+    - Only use columns that are good grouping dimensions
+    - Only use columns that are meaningful metrics
+    - Never suggest "which order_id has highest sales"
+    - Location columns get geographic question phrasing
+    - Prioritise the most business-relevant column pairs
+    - No duplicate questions
     """
     suggestions = []
-    seen = set()  # prevent duplicates
+    seen = set()
 
     def add(question: str, icon: str, route: str):
         if question not in seen and len(suggestions) < max_questions:
@@ -188,53 +231,136 @@ def generate_suggestions(
                 "route": route,
             })
 
-    numeric_cols = profile.get("numeric_cols", [])
-    cat_cols     = profile.get("cat_cols", [])
-    date_cols    = profile.get("date_cols", [])
+    all_numeric = profile.get("numeric_cols", [])
+    all_cat     = profile.get("cat_cols", [])
+    date_cols   = profile.get("date_cols", [])
 
-    # Priority 1: numeric column questions (most useful for retail)
-    for col in numeric_cols[:2]:
-        matched = _match_col(col, NUMERIC_TEMPLATES)
-        if matched:
-            # Add top 2 from matched templates
-            for q in matched[:2]:
+    # Filter numeric cols to only genuine business metrics
+    # Remove location codes, IDs, reference numbers
+    NON_METRIC_KW = [
+        "postal", "zip", "pin", "postcode",
+        "phone", "mobile", "fax", "lat", "lon",
+        "latitude", "longitude", "id", "key",
+        "index", "row", "code", "number",
+        "no", "num", "ref", "serial",
+    ]
+
+    def _col_is_metric(col: str) -> bool:
+        col_lower = col.lower()
+        for kw in NON_METRIC_KW:
+            if (col_lower == kw
+                    or col_lower.endswith("_" + kw)
+                    or col_lower.startswith(kw + "_")):
+                return False
+        return True
+
+    # Only use genuine metrics for question generation
+    good_metrics_all = [
+        c for c in all_numeric if _col_is_metric(c)
+    ]
+
+    # Filter to only meaningful columns
+    good_metrics  = good_metrics_all
+    good_grouping = [c for c in all_cat if _is_good_grouping(c)]
+
+    # Separate location columns from non-location categoricals
+    location_cols    = [c for c in good_grouping if _is_location(c)]
+    non_location_cols = [
+        c for c in good_grouping if not _is_location(c)
+    ]
+
+    # ── Priority 1: non-location grouping × primary metric ──
+    # e.g. "Which category has highest sales?"
+    if not good_metrics:
+        # Fallback to first numeric if all were filtered
+        good_metrics = all_numeric[:1]
+    primary_metric = good_metrics[0] if good_metrics else None
+
+    for cat in non_location_cols[:2]:
+        if primary_metric:
+            qs = _questions_for_grouping_x_metric(
+                cat, primary_metric, is_location_col=False
+            )
+            for q in qs[:1]:  # 1 per categorical column
                 add(q, "📊", "analytics")
+
+    # ── Priority 2: second metric with first grouping ──
+    # e.g. "Which category has highest profit?"
+    if len(good_metrics) >= 2 and non_location_cols:
+        secondary_metric = good_metrics[1]
+        best_cat = non_location_cols[0]
+        q = f"Which {_col_label(best_cat)} has the highest {_col_label(secondary_metric)}?"
+        add(q, "📊", "analytics")
+
+    # ── Priority 3: location questions ──
+    # e.g. "Which region has highest sales?"
+    for loc in location_cols[:2]:
+        if primary_metric:
+            q = f"Which {_col_label(loc)} has the highest {_col_label(primary_metric)}?"
+            add(q, "🗺️", "analytics")
+
+    # ── Priority 4: trend question ──
+    if date_cols and primary_metric:
+        m_lower = primary_metric.lower()
+        if any(w in m_lower for w in ["sales", "revenue"]):
+            add("How has revenue trended — growing or declining?",
+                "📈", "analytics")
+        elif "profit" in m_lower:
+            add("Is profitability improving over time?",
+                "📈", "analytics")
+        elif "quantity" in m_lower or "units" in m_lower:
+            add("Are we selling more or fewer units over time?",
+                "📈", "analytics")
         else:
-            # Generic numeric question using actual column name
-            label = col.replace("_", " ").title()
-            add(f"Which product has the highest {label}?", "📊", "analytics")
-            add(f"Show me {label} trends over time", "📈", "analytics")
+            m = _col_label(primary_metric)
+            add(f"Show me {m} trend over time", "📈", "analytics")
 
-    # Priority 2: categorical questions
-    for col in cat_cols[:1]:
-        matched = _match_col(col, CATEGORICAL_TEMPLATES)
-        if matched:
-            add(matched[0], "🏆", "analytics")
+    # ── Priority 5: underperforming ──
+    if non_location_cols and primary_metric:
+        best_cat = non_location_cols[0]
+        m_lower = primary_metric.lower()
+        if any(w in m_lower for w in
+               ["sales", "revenue", "amount"]):
+            q = "Which category is dragging down overall revenue?"
+        elif "profit" in m_lower:
+            q = "Which category should we consider cutting or restructuring?"
+        elif "quantity" in m_lower or "units" in m_lower:
+            q = "Which products are not moving — slow sellers?"
         else:
-            label = col.replace("_", " ").title()
-            add(f"Which {label} is performing best?", "🏆", "analytics")
-            add(f"Which {label} is underperforming?", "⚠️", "analytics")
+            g = _col_label(best_cat)
+            m = _col_label(primary_metric)
+            q = f"Which {g} needs immediate attention?"
+        add(q, "⚠️", "analytics")
 
-    # Priority 3: time trend question (if date column exists)
-    if date_cols:
-        add(DATE_TEMPLATES[0], "📈", "analytics")
-        if len(suggestions) < max_questions:
-            add(DATE_TEMPLATES[3], "📅", "analytics")
+    # ── Priority 6: anomaly ──
+    if primary_metric:
+        m_lower = primary_metric.lower()
+        if any(w in m_lower for w in ["sales", "revenue"]):
+            add("Are there any unusual sales spikes or drops?",
+                "🔍", "analytics")
+        elif "profit" in m_lower:
+            add("Are there products losing money unexpectedly?",
+                "🔍", "analytics")
+        else:
+            m = _col_label(primary_metric)
+            add(f"Are there any anomalies in {m}?",
+                "🔍", "analytics")
 
-    # Priority 4: anomaly question (always useful)
-    if numeric_cols:
-        label = numeric_cols[0].replace("_", " ").title()
-        add(f"Are there any anomalies in {label}?", "⚠️", "analytics")
-
-    # Priority 5: document question (if PDF uploaded)
+    # ── Priority 7: document question if PDF uploaded ──
     if has_pdf:
-        add(DOCUMENT_TEMPLATES[0], "📄", "rag")
-        add(DOCUMENT_TEMPLATES[2], "📄", "rag")
+        add("Summarise the uploaded document", "📄", "rag")
+        add("What are the key findings in the report?", "📄", "rag")
 
-    # Fill remaining slots with general fallbacks
-    for q in GENERAL_FALLBACK:
-        if len(suggestions) >= max_questions:
-            break
-        add(q, "💡", "analytics")
+    # ── Fill remaining slots with general questions ──
+    FALLBACK = [
+        ("What is the single biggest opportunity in this data?",
+         "💡", "analytics"),
+        ("Where should I focus to improve profitability?",
+         "💡", "analytics"),
+        ("What does this data tell me about my business?",
+         "💡", "analytics"),
+    ]
+    for q, icon, route in FALLBACK:
+        add(q, icon, route)
 
     return suggestions[:max_questions]

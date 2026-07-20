@@ -14,3 +14,4 @@ langchain-google-genai
 xlrd
 langchain-groq
 pypdf
+sentence-transformers

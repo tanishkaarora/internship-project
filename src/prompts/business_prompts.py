@@ -21,7 +21,13 @@ Classify into EXACTLY ONE category:
   "what's underperforming?", "summarise the data",
   "give me an overview", "what are the key insights?",
   "tell me about the data", "analyse the data",
-  "what does this data tell me?"
+  "what does this data tell me?",
+  "which city has the highest sales?",
+  "which region is performing best?",
+  "where are most of our orders coming from?",
+  "which postal code has the highest revenue?",
+  "show me sales by state",
+  "which location is underperforming?"
 
 - "rag" — question is about document content, policies,
   reports, or text information from uploaded files

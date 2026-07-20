@@ -40,6 +40,35 @@ def _infer_business_domain(col_text: str,
             ),
         }
 
+    # Location / geographic data
+    location_keywords = [
+        "postal_code", "zip", "city", "state",
+        "region", "country", "lat", "lon", "latitude",
+        "longitude", "district", "province"
+    ]
+    has_location = any(kw in col_text for kw in location_keywords)
+    has_sales    = any(kw in col_text for kw in
+                       ["sales", "revenue", "profit", "amount"])
+
+    if has_location and has_sales:
+        return {
+            "label": "Retail Sales Data with Geographic Dimension",
+            "description": (
+                "This dataset combines sales transaction data "
+                "with location information. You can analyse "
+                "both product/category performance AND geographic "
+                "patterns — which regions, cities, or postal codes "
+                "drive the most revenue."
+            ),
+            "suggestion": (
+                "Good questions to ask:\n"
+                "- *'Which region has the highest sales?'*\n"
+                "- *'Which city is underperforming?'*\n"
+                "- *'Which postal code has the highest revenue?'*\n"
+                "- *'Which product sells best in each region?'*"
+            ),
+        }
+
     # Retail sales
     if any(w in col_text for w in
            ["sales", "revenue", "units_sold", "order",
