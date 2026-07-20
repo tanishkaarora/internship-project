@@ -8,69 +8,77 @@ class SynthesiserNode:
         self.llm = llm
 
     def synthesise(self, state: CopilotState) -> CopilotState:
-        # Build context description
-        context_parts = []
-        if state.analytics_result:
-            context_parts.append("structured data analytics results")
-        if state.rag_context:
-            context_parts.append("relevant document excerpts")
-        context_desc = " and ".join(context_parts) if context_parts else "general knowledge"
+        has_analytics = bool(state.analytics_result.strip())
+        has_rag       = bool(state.rag_context.strip())
 
-        analytics_section = (
-            f"Analytics Results:\n{state.analytics_result}"
-            if state.analytics_result else ""
-        )
-        rag_section = (
-            f"Document Context:\n{state.rag_context}"
-            if state.rag_context else ""
-        )
+        # Build context sections
+        analytics_section = ""
+        if has_analytics:
+            analytics_section = (
+                f"=== STRUCTURED DATA ANALYSIS ===\n"
+                f"{state.analytics_result}\n"
+                f"=== END DATA ANALYSIS ==="
+            )
 
-        # Format recent chat history
-        history_text = ""
+        rag_section = ""
+        if has_rag:
+            rag_section = (
+                f"=== DOCUMENT CONTENT (from uploaded PDF) ===\n"
+                f"{state.rag_context}\n"
+                f"=== END DOCUMENT CONTENT ==="
+            )
+
+        # Build context description for the prompt
+        if has_analytics and has_rag:
+            context_description = (
+                "BOTH structured data analysis AND document excerpts. "
+                "You MUST use both in your answer. "
+                "First summarise what the data shows, "
+                "then what the document adds or confirms."
+            )
+        elif has_analytics:
+            context_description = "structured data analysis results"
+        elif has_rag:
+            context_description = "document excerpts from the uploaded PDF"
+        else:
+            context_description = "general business knowledge"
+
+        # Chat history — last 2 exchanges, first sentence only
+        history_text = "No prior conversation."
         if state.chat_history:
-            # Only pass the last 2 exchanges (4 messages max)
-            # Truncate each message more aggressively to prevent
-            # previous analytics results from polluting new answers
             recent = state.chat_history[-4:]
-            history_text_parts = []
+            parts = []
             for m in recent:
-                role = m["role"].upper()
-                # For assistant messages, only take first sentence
-                # to avoid full analytics dumps appearing as context
-                content = m["content"]
-                if role == "ASSISTANT":
-                    # Take only up to the first newline or 120 chars
-                    first_line = content.split("\n")[0][:120]
-                    content = first_line + ("..." if len(content) > 120 else "")
-                else:
-                    # User questions: keep full but cap at 150 chars
-                    content = content[:150]
-                history_text_parts.append(f"{role}: {content}")
-            history_text = "\n".join(history_text_parts)
+                role    = m["role"].upper()
+                content = m["content"].split("\n")[0][:150]
+                parts.append(f"{role}: {content}")
+            history_text = "\n".join(parts)
 
         prompt = SYNTHESISER_PROMPT.format(
-            context_description=context_desc,
+            context_description=context_description,
             analytics_section=analytics_section,
             rag_section=rag_section,
             question=state.question,
-            chat_history=history_text or "No prior conversation."
+            chat_history=history_text,
         )
 
-        # Workaround: remove double curly braces/strip brackets if prompt formatting complaints occur,
-        # but here we just use python format which should be clean.
         response = self.llm.invoke(prompt)
-        answer = response.content
+        answer   = response.content
 
-        # Collect sources
+        # Collect sources from RAG
         sources = []
         if state.retrieved_docs:
             for doc in state.retrieved_docs[:3]:
-                src = doc.metadata.get("source", "document")
+                src  = doc.metadata.get("source", "document")
                 page = doc.metadata.get("page", "")
-                sources.append(f"{src}" + (f" p.{page}" if page else ""))
+                import os
+                src_name = os.path.basename(str(src))
+                sources.append(
+                    src_name + (f" p.{page}" if page else "")
+                )
 
-        return CopilotState(**{
-            **state.model_dump(),
-            "answer": answer,
-            "sources": sources
-        })
+        return CopilotState(
+            **{**state.model_dump(),
+               "answer": answer,
+               "sources": list(dict.fromkeys(sources))}
+        )

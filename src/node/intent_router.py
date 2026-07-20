@@ -8,17 +8,15 @@ class IntentRouterNode:
         self.llm = llm
 
     def route(self, state: CopilotState) -> CopilotState:
-        """
-        Determines whether question needs analytics, RAG, or both.
-        This is a cheap LLM call — just classification, no generation.
-        """
-        # Get context from session (passed via state or config)
         import streamlit as st
-        has_csv = st.session_state.get("clean_df") is not None
 
-        import streamlit as st
+        # Check what data sources are available
+        has_csv = st.session_state.get("clean_df") is not None
         vs = st.session_state.get("vector_store")
-        has_pdf = vs is not None and getattr(vs, "db", None) is not None
+        has_pdf = (
+            vs is not None
+            and getattr(vs, "db", None) is not None
+        )
 
         prompt = INTENT_ROUTER_PROMPT.format(
             has_csv=str(has_csv),
@@ -29,16 +27,30 @@ class IntentRouterNode:
         response = self.llm.invoke(prompt)
         route_text = response.content.strip().lower()
 
-        # Normalise response
-        if "both" in route_text:
-            route = "both"
-        elif "rag" in route_text:
-            route = "rag"
-        elif "analytics" in route_text:
-            route = "analytics"
-        elif "general" in route_text:
-            route = "general"
-        else:
-            route = "rag"  # default fallback
+        # Extract just the route word — LLM sometimes
+        # adds punctuation or extra words
+        route = "analytics"  # safe default
+        for word in ["both", "rag", "general", "analytics"]:
+            if word in route_text:
+                route = word
+                break
 
-        return CopilotState(**{**state.model_dump(), "route": route})
+        # Override: if question mentions both data and document
+        # and PDF is available, force "both"
+        q_lower = state.question.lower()
+        both_triggers = [
+            "and the document", "and the report", "and the pdf",
+            "data and document", "document and data",
+            "summarise document and data",
+            "summarise the data and",
+            "document and the data",
+            "tell about", "both", "too",
+        ]
+        has_both_trigger = any(t in q_lower for t in both_triggers)
+
+        if has_both_trigger and has_pdf and has_csv:
+            route = "both"
+
+        return CopilotState(
+            **{**state.model_dump(), "route": route}
+        )
