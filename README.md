@@ -77,11 +77,11 @@ The intent router uses the LLM to classify each question — so "which product s
 |-------|-----------|----------------|
 | UI | Streamlit | Full app in Python, no frontend framework needed |
 | Agent orchestration | LangGraph | Conditional routing between nodes — not possible with a simple chain |
-| LLM | Llama 3.1 8B (via Groq) / Gemini | Flexible model choices, default to Groq (Llama 3.1) |
+| LLM | Llama 3.1 8B (via Groq) / Gemini | Flexible model choices, default to Groq (Llama 3.1 8B) |
 | Vector database | FAISS (local) | Zero infrastructure, runs in memory, sufficient for single-user |
 | Data processing | pandas | Industry standard, handles messy retail CSVs well |
 | Charts | Plotly Express | Interactive charts in 2–3 lines, native Streamlit support |
-| Embeddings | Google GenAI / Mock Embeddings | Dynamically selected based on active model config |
+| Embeddings | sentence-transformers (BGE-small) | Free, local, runs in memory on CPU with any LLM |
 
 ---
 
@@ -169,15 +169,17 @@ pip install -r requirements.txt
 
 Copy `.env.example` to `.env` in the root folder and add your key:
 ```env
-GEMINI_API_KEY=your_key_here
-USE_GEMINI=true
-```
-
-Or use **Groq** (also free, no credit card):
-```env
+# Primary (Recommended): Groq Llama 3.1 8B (free, no credit card)
 GROQ_API_KEY=your_key_here
 USE_GROQ=true
 USE_GEMINI=false
+```
+
+Or use **Gemini** (alternative):
+```env
+GEMINI_API_KEY=your_key_here
+USE_GEMINI=true
+USE_GROQ=false
 ```
 
 ### 3. Run
@@ -236,6 +238,7 @@ All tests passed successfully!
 | Unit tests (including Smart Column Detective) | ✅ Done |
 | Mini-extension (Smart Column Detective) | ✅ Done |
 | Robust offline recovery & Mock mode | ✅ Done |
+| Local HuggingFace BGE embeddings (CPU) | ✅ Done |
 | Deployment | ⏳ Week 4 |
 | ADRs (3 required: ADR-001, ADR-002, ADR-003) | ✅ Done |
 
