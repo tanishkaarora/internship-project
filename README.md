@@ -18,7 +18,9 @@ Most tools handle one or the other. This copilot handles both simultaneously, ro
 
 ## 🎥 Demo
 
-> Loom walkthrough coming in Week 4
+**Live Deployment URL:** [retail-brain.streamlit.app](https://retail-brain.streamlit.app/)
+
+**Demo Video:** Coming Soon (will be added in the next update).
 
 ---
 
