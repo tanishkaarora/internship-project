@@ -82,7 +82,7 @@ html, body, [class*="css"], .stApp {
 }
 
 /* ── Hide default Streamlit chrome ── */
-#MainMenu, footer, header { visibility: hidden; }
+#MainMenu, footer { visibility: hidden; }
 .stDeployButton { display: none; }
 .viewerBadge_container__r5tak { display: none; }
 
