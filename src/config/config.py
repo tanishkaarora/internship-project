@@ -2,9 +2,11 @@
 
 import os
 import streamlit as st
-from dotenv import load_dotenv
-
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 class ConfigMeta(type):
     def get_session_state_val(cls, key, default=None):

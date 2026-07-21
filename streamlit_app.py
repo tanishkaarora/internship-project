@@ -1,16 +1,7 @@
-"""AI Retail Decision Copilot — Professional SaaS UI"""
-
-import sys
-from pathlib import Path
-print("DIAGNOSTICS - SYS PATH:", sys.path, file=sys.stderr)
-try:
-    import dotenv
-    print("DIAGNOSTICS - DOTENV PATH:", dotenv.__file__, file=sys.stderr)
-except Exception as e:
-    print("DIAGNOSTICS - DOTENV FAILED:", str(e), file=sys.stderr)
-
 import streamlit as st
 import time
+from pathlib import Path
+import sys
 
 sys.path.append(str(Path(__file__).parent))
 
