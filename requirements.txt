@@ -5,6 +5,8 @@ plotly==6.5.0
 langchain==1.3.11
 langchain-community==0.4.2
 langchain-openai==1.3.3
+langchain-core==1.4.8
+langchain-text-splitters==1.1.2
 langgraph==1.2.6
 pydantic==2.12.5
 faiss-cpu==1.14.3
